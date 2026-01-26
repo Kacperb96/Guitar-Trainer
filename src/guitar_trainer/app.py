@@ -1,5 +1,9 @@
+from guitar_trainer.cli import run_cli
+
+
 def main() -> None:
-    print("Guitar Trainer: OK")
+    run_cli()
+
 
 if __name__ == "__main__":
     main()

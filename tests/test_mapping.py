@@ -1,5 +1,5 @@
 import pytest
-from guitar_trainer.mapping import note_index_at, positions_for_note
+from guitar_trainer.core.mapping import note_index_at, positions_for_note
 
 
 def test_note_index_at_basic():

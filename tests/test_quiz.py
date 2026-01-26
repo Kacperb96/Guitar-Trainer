@@ -1,13 +1,13 @@
 import random
 import pytest
 
-from guitar_trainer.quiz import (
+from guitar_trainer.core.quiz import (
     random_position,
     question_name_at_position,
     check_note_name_answer,
     check_positions_answer,
 )
-from guitar_trainer.mapping import positions_for_note
+from guitar_trainer.core.mapping import positions_for_note
 
 
 def test_random_position_max_fret_zero():

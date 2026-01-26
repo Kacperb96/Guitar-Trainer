@@ -1,4 +1,4 @@
-from guitar_trainer.notes import normalize_note_index, index_to_name
+from guitar_trainer.core.notes import normalize_note_index, index_to_name
 
 def test_normalize_note_index():
     assert normalize_note_index(0) == 0
