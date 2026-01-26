@@ -41,14 +41,11 @@ def pixel_to_position(
     if fret < 0 or fret > num_frets:
         return None
 
-    # gui_row: 0..5 where 0 is the top string line
     gui_row = (y - margin_y) // string_spacing
     if gui_row < 0 or gui_row > 5:
         return None
 
-    # invert: gui_row 0 -> core string 5, gui_row 5 -> core string 0
     string_index = 5 - int(gui_row)
-
     return int(string_index), int(fret)
 
 
@@ -69,10 +66,8 @@ def position_to_pixel_center(
       - bottom row represents core string_index=0
     """
     x = margin_x + fret * fret_width + fret_width // 2
-
     gui_row = 5 - string_index
     y = margin_y + gui_row * string_spacing
-
     return x, y
 
 
@@ -82,6 +77,8 @@ class Fretboard(tk.Frame):
 
     - Draws a 6-string fretboard up to num_frets.
     - GUI orientation: high e on top, low E on bottom.
+    - String numbers on the left: 1 at top (high e) ... 6 at bottom (low E).
+    - Open-string area (fret=0) is visually highlighted.
     - Can optionally report clicks via a callback.
     - Supports highlighting a single position (Mode A) and multiple positions (Mode B).
     """
@@ -92,7 +89,7 @@ class Fretboard(tk.Frame):
         *,
         num_frets: int = 12,
         tuning=STANDARD_TUNING,
-        margin_x: int = 20,
+        margin_x: int = 30,   # slightly bigger to fit string numbers
         margin_y: int = 20,
         fret_width: int = 50,
         string_spacing: int = 30,
@@ -129,35 +126,69 @@ class Fretboard(tk.Frame):
         self._click_callback = callback
 
     def draw(self) -> None:
-        # Draw frets (vertical lines)
+        board_left = self.margin_x
+        board_right = self.margin_x + (self.num_frets + 1) * self.fret_width
+        board_top = self.margin_y
+        board_bottom = self.margin_y + 5 * self.string_spacing
+
+        # --- Highlight open-string area (fret 0 segment) ---
+        # This is the rectangle between the left border and the nut line.
+        open_left = board_left
+        open_right = board_left + self.fret_width
+        self.canvas.create_rectangle(
+            open_left,
+            board_top,
+            open_right,
+            board_bottom,
+            outline="",
+            fill="#f2f2f2",  # light gray to distinguish open-string area
+        )
+
+        # --- Draw frets (vertical lines) ---
+        # f=0 is the very left border line
         for f in range(self.num_frets + 2):  # +1 open area, +1 last line
-            x = self.margin_x + f * self.fret_width
+            x = board_left + f * self.fret_width
             self.canvas.create_line(
-                x,
-                self.margin_y,
-                x,
-                self.margin_y + 5 * self.string_spacing,
+                x, board_top, x, board_bottom,
                 width=2 if f == 0 else 1,
             )
 
-        # Draw strings (horizontal lines) as GUI rows 0..5 (top..bottom)
+        # --- Draw nut line (between open area and fret 1) thicker ---
+        nut_x = board_left + self.fret_width
+        self.canvas.create_line(nut_x, board_top, nut_x, board_bottom, width=4)
+
+        # --- Draw strings (horizontal lines) as GUI rows 0..5 (top..bottom) ---
         for gui_row in range(6):
             y = self.margin_y + gui_row * self.string_spacing
             self.canvas.create_line(
-                self.margin_x,
+                board_left,
                 y,
-                self.margin_x + (self.num_frets + 1) * self.fret_width,
+                board_right,
                 y,
                 width=2,
             )
 
-        # Fret numbers
+        # --- String numbers on the left (1 at top = high e) ---
+        # Place them slightly left from the board.
+        label_x = board_left - 10
+        for gui_row in range(6):
+            y = self.margin_y + gui_row * self.string_spacing
+            string_number = gui_row + 1  # 1..6 top->bottom
+            self.canvas.create_text(
+                label_x,
+                y,
+                text=str(string_number),
+                fill="gray",
+                anchor="e",
+            )
+
+        # --- Fret numbers below ---
         for f in [0, 3, 5, 7, 9, 12, 15, 17, 19, 21, 24]:
             if f <= self.num_frets:
-                x = self.margin_x + f * self.fret_width + self.fret_width // 2
+                x = board_left + f * self.fret_width + self.fret_width // 2
                 self.canvas.create_text(
                     x,
-                    self.margin_y + 5 * self.string_spacing + 12,
+                    board_bottom + 12,
                     text=str(f),
                     fill="gray",
                 )
