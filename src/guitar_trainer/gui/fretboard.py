@@ -6,7 +6,7 @@ from guitar_trainer.core.notes import index_to_name
 from guitar_trainer.core.tuning import STANDARD_TUNING
 
 
-Position = Tuple[int, int]  # (string_index, fret)
+Position = Tuple[int, int]  # (string_index, fret) in CORE convention: 0=low E ... 5=high e
 
 
 def pixel_to_position(
@@ -22,7 +22,10 @@ def pixel_to_position(
     """
     Convert canvas pixel coordinates to (string_index, fret).
 
-    string_index: 0..5 (0 = top string)
+    GUI orientation:
+      - top line = high e (core string_index = 5)
+      - bottom line = low E (core string_index = 0)
+
     fret: 0..num_frets
     Returns None if click is outside the fretboard area.
     """
@@ -38,9 +41,13 @@ def pixel_to_position(
     if fret < 0 or fret > num_frets:
         return None
 
-    string_index = (y - margin_y) // string_spacing
-    if string_index < 0 or string_index > 5:
+    # gui_row: 0..5 where 0 is the top string line
+    gui_row = (y - margin_y) // string_spacing
+    if gui_row < 0 or gui_row > 5:
         return None
+
+    # invert: gui_row 0 -> core string 5, gui_row 5 -> core string 0
+    string_index = 5 - int(gui_row)
 
     return int(string_index), int(fret)
 
@@ -56,10 +63,16 @@ def position_to_pixel_center(
 ) -> Tuple[int, int]:
     """
     Return center (x,y) in pixels for a given (string_index, fret) cell.
-    fret=0 is the open-string area (first segment).
+
+    GUI orientation:
+      - top row represents core string_index=5
+      - bottom row represents core string_index=0
     """
     x = margin_x + fret * fret_width + fret_width // 2
-    y = margin_y + string_index * string_spacing
+
+    gui_row = 5 - string_index
+    y = margin_y + gui_row * string_spacing
+
     return x, y
 
 
@@ -68,6 +81,7 @@ class Fretboard(tk.Frame):
     A simple fretboard canvas widget.
 
     - Draws a 6-string fretboard up to num_frets.
+    - GUI orientation: high e on top, low E on bottom.
     - Can optionally report clicks via a callback.
     - Supports highlighting a single position (Mode A) and multiple positions (Mode B).
     """
@@ -103,7 +117,7 @@ class Fretboard(tk.Frame):
         self.status.pack(side=tk.BOTTOM, pady=5)
 
         self._single_marker_id: int | None = None
-        self._cell_markers: dict[Position, int] = {}  # many markers (Mode B)
+        self._cell_markers: dict[Position, int] = {}
         self._click_callback: Callable[[Position], None] | None = None
 
         self.draw()
@@ -126,9 +140,9 @@ class Fretboard(tk.Frame):
                 width=2 if f == 0 else 1,
             )
 
-        # Draw strings (horizontal lines)
-        for s in range(6):
-            y = self.margin_y + s * self.string_spacing
+        # Draw strings (horizontal lines) as GUI rows 0..5 (top..bottom)
+        for gui_row in range(6):
+            y = self.margin_y + gui_row * self.string_spacing
             self.canvas.create_line(
                 self.margin_x,
                 y,
@@ -166,8 +180,7 @@ class Fretboard(tk.Frame):
 
         r = max(6, self.string_spacing // 4)
         self._single_marker_id = self.canvas.create_oval(
-            cx - r, cy - r, cx + r, cy + r,
-            outline="black", width=2
+            cx - r, cy - r, cx + r, cy + r, outline="black", width=2
         )
 
     def clear_single_highlight(self) -> None:
@@ -176,11 +189,7 @@ class Fretboard(tk.Frame):
             self._single_marker_id = None
 
     def set_cell_marker(self, position: Position, *, outline: str = "black") -> None:
-        """
-        Mode B helper: draw/update a marker for a specific cell.
-        Uses small circle.
-        """
-        # remove existing marker at this cell first
+        """Mode B: draw/update a marker for a specific cell."""
         self.clear_cell_marker(position)
 
         string_index, fret = position
@@ -194,8 +203,7 @@ class Fretboard(tk.Frame):
         )
         r = max(5, self.string_spacing // 5)
         marker_id = self.canvas.create_oval(
-            cx - r, cy - r, cx + r, cy + r,
-            outline=outline, width=2
+            cx - r, cy - r, cx + r, cy + r, outline=outline, width=2
         )
         self._cell_markers[position] = marker_id
 
