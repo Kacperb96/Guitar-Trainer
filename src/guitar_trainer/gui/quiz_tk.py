@@ -17,9 +17,8 @@ class NoteQuizFrame(tk.Frame):
     """
     GUI Mode A:
     - show a dot at a random (string,fret)
-    - user types note name (e.g. F#) and submits
-    - shows feedback and keeps score
-    - updates Stats and saves at the end
+    - user types note name and submits
+    - keeps score, saves stats
     """
 
     def __init__(
@@ -31,6 +30,7 @@ class NoteQuizFrame(tk.Frame):
         num_questions: int = 10,
         max_fret: int = 12,
         rng_seed: int | None = None,
+        on_back=None,
     ) -> None:
         super().__init__(master)
 
@@ -39,14 +39,20 @@ class NoteQuizFrame(tk.Frame):
         self.num_questions = num_questions
         self.max_fret = max_fret
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
+        self.on_back = on_back
 
         self.current_index = 0
         self.score = 0
         self.current_position: Position | None = None
         self.current_correct_name: str | None = None
 
-        self.header = tk.Label(self, text="Guitar Trainer – GUI Mode A (Guess the note)")
-        self.header.pack(pady=(0, 8))
+        header_row = tk.Frame(self)
+        header_row.pack(fill="x", pady=(0, 8))
+
+        tk.Label(header_row, text="Mode A: Guess the note", font=("Arial", 13)).pack(side="left")
+
+        if self.on_back is not None:
+            tk.Button(header_row, text="Back to menu", command=self._back).pack(side="right")
 
         self.progress = tk.Label(self, text="Question 0/0 | Score: 0/0")
         self.progress.pack(pady=(0, 6))
@@ -71,6 +77,11 @@ class NoteQuizFrame(tk.Frame):
         self.answer_entry.bind("<Return>", lambda _e: self.submit_answer())
 
         self.next_question()
+
+    def _back(self) -> None:
+        # Save stats before leaving
+        save_stats(self.stats_path, self.stats)
+        self.on_back()
 
     def update_progress(self) -> None:
         self.progress.config(
@@ -121,7 +132,7 @@ class NoteQuizFrame(tk.Frame):
         self.fretboard.clear_single_highlight()
         save_stats(self.stats_path, self.stats)
         self.progress.config(text=f"Finished | Score: {self.score}/{self.num_questions}")
-        self.feedback.config(text="Saved statistics. You can close the window.")
+        self.feedback.config(text="Saved statistics. You can go back to menu or close the window.")
         self.submit_btn.config(state=tk.DISABLED)
         self.answer_entry.config(state=tk.DISABLED)
 
@@ -129,11 +140,10 @@ class NoteQuizFrame(tk.Frame):
 class PositionsQuizFrame(tk.Frame):
     """
     GUI Mode B:
-    - shows a target note name (e.g. F#)
-    - user clicks ALL positions on the fretboard up to max_fret
-    - submit checks correctness (set equality)
-    - shows feedback and highlights results
-    - updates Stats and saves at the end
+    - show target note name
+    - user clicks ALL positions
+    - submit checks and highlights results
+    - saves stats
     """
 
     def __init__(
@@ -145,6 +155,7 @@ class PositionsQuizFrame(tk.Frame):
         num_questions: int = 5,
         max_fret: int = 12,
         rng_seed: int | None = None,
+        on_back=None,
     ) -> None:
         super().__init__(master)
 
@@ -153,6 +164,7 @@ class PositionsQuizFrame(tk.Frame):
         self.num_questions = num_questions
         self.max_fret = max_fret
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
+        self.on_back = on_back
 
         self.current_index = 0
         self.score = 0
@@ -161,10 +173,15 @@ class PositionsQuizFrame(tk.Frame):
         self.target_note_name: str | None = None
 
         self.selected: set[Position] = set()
-        self.locked = False  # lock clicks while showing results
+        self.locked = False
 
-        self.header = tk.Label(self, text="Guitar Trainer – GUI Mode B (Find all positions)")
-        self.header.pack(pady=(0, 8))
+        header_row = tk.Frame(self)
+        header_row.pack(fill="x", pady=(0, 8))
+
+        tk.Label(header_row, text="Mode B: Find all positions", font=("Arial", 13)).pack(side="left")
+
+        if self.on_back is not None:
+            tk.Button(header_row, text="Back to menu", command=self._back).pack(side="right")
 
         self.progress = tk.Label(self, text="Question 0/0 | Score: 0/0")
         self.progress.pack(pady=(0, 6))
@@ -189,6 +206,10 @@ class PositionsQuizFrame(tk.Frame):
         self.feedback.pack(pady=(6, 0))
 
         self.next_question()
+
+    def _back(self) -> None:
+        save_stats(self.stats_path, self.stats)
+        self.on_back()
 
     def update_progress(self) -> None:
         self.progress.config(
@@ -225,7 +246,6 @@ class PositionsQuizFrame(tk.Frame):
         if self.locked:
             return
 
-        # Toggle selection
         if position in self.selected:
             self.selected.remove(position)
             self.fretboard.clear_cell_marker(position)
@@ -244,7 +264,6 @@ class PositionsQuizFrame(tk.Frame):
         user_positions = list(self.selected)
         correct = check_positions_answer(self.target_note_index, self.max_fret, user_positions)
 
-        # record stats for Mode B (no per-string)
         self.stats.record_attempt_mode_b(correct=correct, note_name=self.target_note_name)
 
         correct_positions = set(positions_for_note(self.target_note_index, self.max_fret))
@@ -256,15 +275,11 @@ class PositionsQuizFrame(tk.Frame):
             self.after(700, self.next_question)
             return
 
-        # Wrong answer: show feedback + highlight results
         self.locked = True
         self.fretboard.clear_all_cell_markers()
 
-        # user selected but wrong (red)
         wrong_selected = self.selected - correct_positions
-        # correct and selected (green)
         correct_selected = self.selected & correct_positions
-        # correct but missing (orange)
         missing = correct_positions - self.selected
 
         for pos in correct_selected:
@@ -272,7 +287,6 @@ class PositionsQuizFrame(tk.Frame):
         for pos in wrong_selected:
             self.fretboard.set_cell_marker(pos, outline="red")
         for pos in list(missing)[:30]:
-            # limit to avoid clutter if max_fret is high; still shows enough examples
             self.fretboard.set_cell_marker(pos, outline="orange")
 
         self.feedback.config(
@@ -283,7 +297,6 @@ class PositionsQuizFrame(tk.Frame):
             )
         )
 
-        # proceed after a short pause
         self.after(1400, self.next_question)
 
     def finish(self) -> None:
@@ -292,7 +305,7 @@ class PositionsQuizFrame(tk.Frame):
         save_stats(self.stats_path, self.stats)
         self.progress.config(text=f"Finished | Score: {self.score}/{self.num_questions}")
         self.task.config(text="")
-        self.feedback.config(text="Saved statistics. You can close the window.")
+        self.feedback.config(text="Saved statistics. You can go back to menu or close the window.")
         self.submit_btn.config(state=tk.DISABLED)
         self.clear_btn.config(state=tk.DISABLED)
         self.locked = True

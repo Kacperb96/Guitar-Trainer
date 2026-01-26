@@ -1,0 +1,118 @@
+import tkinter as tk
+from tkinter import messagebox
+
+from guitar_trainer.core.stats import Stats, load_stats, save_stats
+
+
+class MenuFrame(tk.Frame):
+    """
+    Start menu for GUI:
+    - choose mode (A/B)
+    - set num_questions and max_fret
+    - show/reset stats
+    - start selected mode
+    """
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        stats_path: str,
+        on_start: callable,
+    ) -> None:
+        super().__init__(master)
+
+        self.stats_path = stats_path
+        self.on_start = on_start  # callback(mode, num_questions, max_fret)
+
+        # Load stats once for menu actions
+        self.stats = load_stats(self.stats_path)
+
+        self.mode_var = tk.StringVar(value="A")
+        self.questions_var = tk.StringVar(value="10")
+        self.max_fret_var = tk.StringVar(value="12")
+
+        title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
+        title.pack(pady=(0, 10))
+
+        # Mode selection
+        mode_box = tk.LabelFrame(self, text="Mode")
+        mode_box.pack(fill="x", padx=10, pady=6)
+
+        tk.Radiobutton(mode_box, text="Mode A: Guess the note", variable=self.mode_var, value="A").pack(
+            anchor="w", padx=10, pady=2
+        )
+        tk.Radiobutton(mode_box, text="Mode B: Find all positions", variable=self.mode_var, value="B").pack(
+            anchor="w", padx=10, pady=2
+        )
+
+        # Settings
+        settings = tk.LabelFrame(self, text="Settings")
+        settings.pack(fill="x", padx=10, pady=6)
+
+        row1 = tk.Frame(settings)
+        row1.pack(fill="x", padx=10, pady=4)
+        tk.Label(row1, text="Number of questions:").pack(side="left")
+        tk.Entry(row1, textvariable=self.questions_var, width=8).pack(side="left", padx=8)
+
+        row2 = tk.Frame(settings)
+        row2.pack(fill="x", padx=10, pady=4)
+        tk.Label(row2, text="Max fret (0–24):").pack(side="left")
+        tk.Entry(row2, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
+
+        # Buttons
+        btns = tk.Frame(self)
+        btns.pack(pady=10)
+
+        tk.Button(btns, text="Start", width=12, command=self._start_clicked).pack(side="left", padx=6)
+        tk.Button(btns, text="Show stats", width=12, command=self._show_stats).pack(side="left", padx=6)
+        tk.Button(btns, text="Reset stats", width=12, command=self._reset_stats).pack(side="left", padx=6)
+        tk.Button(btns, text="Quit", width=12, command=self._quit).pack(side="left", padx=6)
+
+        hint = tk.Label(
+            self,
+            text="Tip: In the fretboard view, string 1 is the top (high e), string 6 is the bottom (low E).",
+            fg="gray",
+        )
+        hint.pack(pady=(5, 0))
+
+    def _parse_int(self, value: str, *, min_value: int, max_value: int, field_name: str) -> int:
+        value = value.strip()
+        try:
+            x = int(value)
+        except ValueError:
+            raise ValueError(f"{field_name} must be an integer.")
+
+        if x < min_value or x > max_value:
+            raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
+        return x
+
+    def _start_clicked(self) -> None:
+        try:
+            mode = self.mode_var.get().strip().upper()
+            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=100, field_name="Number of questions")
+            max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
+        except ValueError as e:
+            messagebox.showerror("Invalid settings", str(e))
+            return
+
+        if mode not in {"A", "B"}:
+            messagebox.showerror("Invalid mode", "Mode must be A or B.")
+            return
+
+        self.on_start(mode, num_questions, max_fret)
+
+    def _show_stats(self) -> None:
+        self.stats = load_stats(self.stats_path)
+        messagebox.showinfo("Statistics", self.stats.summary())
+
+    def _reset_stats(self) -> None:
+        answer = messagebox.askyesno("Reset stats", "Are you sure you want to reset statistics?")
+        if not answer:
+            return
+        self.stats = Stats()
+        save_stats(self.stats_path, self.stats)
+        messagebox.showinfo("Reset stats", "Statistics have been reset.")
+
+    def _quit(self) -> None:
+        self.master.destroy()
