@@ -1,22 +1,22 @@
 {
   "by_mode": {
     "A": {
-      "attempts": 22,
-      "correct": 20
+      "attempts": 32,
+      "correct": 30
     }
   },
   "by_note": {
     "A": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     },
     "A#": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     },
     "B": {
-      "attempts": 4,
-      "correct": 4
+      "attempts": 5,
+      "correct": 5
     },
     "C": {
       "attempts": 3,
@@ -27,24 +27,70 @@
       "correct": 1
     },
     "D": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 4,
+      "correct": 4
     },
     "D#": {
       "attempts": 2,
       "correct": 2
     },
     "E": {
-      "attempts": 4,
-      "correct": 4
+      "attempts": 5,
+      "correct": 5
     },
     "F": {
-      "attempts": 1,
-      "correct": 0
+      "attempts": 3,
+      "correct": 2
     },
     "F#": {
+      "attempts": 2,
+      "correct": 1
+    },
+    "G": {
       "attempts": 1,
-      "correct": 0
+      "correct": 1
+    }
+  },
+  "by_position": {
+    "1,8": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "1,9": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "2,0": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "2,12": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "2,5": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "2,7": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "3,3": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "4,5": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "4,6": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "5,7": {
+      "attempts": 1,
+      "correct": 1
     }
   },
   "by_string": {
@@ -53,22 +99,26 @@
       "correct": 8
     },
     "1": {
-      "attempts": 3,
-      "correct": 3
-    },
-    "2": {
-      "attempts": 2,
-      "correct": 2
-    },
-    "4": {
-      "attempts": 7,
+      "attempts": 5,
       "correct": 5
     },
+    "2": {
+      "attempts": 6,
+      "correct": 6
+    },
+    "3": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "4": {
+      "attempts": 9,
+      "correct": 7
+    },
     "5": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     }
   },
-  "total_attempts": 22,
-  "total_correct": 20
+  "total_attempts": 32,
+  "total_correct": 30
 }

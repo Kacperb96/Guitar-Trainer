@@ -5,27 +5,20 @@ from guitar_trainer.core.stats import Stats, load_stats, save_stats
 
 
 class MenuFrame(tk.Frame):
-    """
-    Start menu for GUI:
-    - choose mode (A/B)
-    - set num_questions and max_fret
-    - show/reset stats
-    - start selected mode
-    """
-
     def __init__(
         self,
         master: tk.Misc,
         *,
         stats_path: str,
         on_start: callable,
+        on_heatmap: callable,
     ) -> None:
         super().__init__(master)
 
         self.stats_path = stats_path
-        self.on_start = on_start  # callback(mode, num_questions, max_fret)
+        self.on_start = on_start        # callback(mode, num_questions, max_fret)
+        self.on_heatmap = on_heatmap    # callback(max_fret)
 
-        # Load stats once for menu actions
         self.stats = load_stats(self.stats_path)
 
         self.mode_var = tk.StringVar(value="A")
@@ -35,7 +28,6 @@ class MenuFrame(tk.Frame):
         title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
         title.pack(pady=(0, 10))
 
-        # Mode selection
         mode_box = tk.LabelFrame(self, text="Mode")
         mode_box.pack(fill="x", padx=10, pady=6)
 
@@ -46,7 +38,6 @@ class MenuFrame(tk.Frame):
             anchor="w", padx=10, pady=2
         )
 
-        # Settings
         settings = tk.LabelFrame(self, text="Settings")
         settings.pack(fill="x", padx=10, pady=6)
 
@@ -60,18 +51,18 @@ class MenuFrame(tk.Frame):
         tk.Label(row2, text="Max fret (0–24):").pack(side="left")
         tk.Entry(row2, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
 
-        # Buttons
         btns = tk.Frame(self)
         btns.pack(pady=10)
 
         tk.Button(btns, text="Start", width=12, command=self._start_clicked).pack(side="left", padx=6)
+        tk.Button(btns, text="Heatmap", width=12, command=self._heatmap_clicked).pack(side="left", padx=6)
         tk.Button(btns, text="Show stats", width=12, command=self._show_stats).pack(side="left", padx=6)
         tk.Button(btns, text="Reset stats", width=12, command=self._reset_stats).pack(side="left", padx=6)
         tk.Button(btns, text="Quit", width=12, command=self._quit).pack(side="left", padx=6)
 
         hint = tk.Label(
             self,
-            text="Tip: In the fretboard view, string 1 is the top (high e), string 6 is the bottom (low E).",
+            text="Strings: 1 (top, high e) ... 6 (bottom, low E). Heatmap is based on Mode A questions.",
             fg="gray",
         )
         hint.pack(pady=(5, 0))
@@ -82,7 +73,6 @@ class MenuFrame(tk.Frame):
             x = int(value)
         except ValueError:
             raise ValueError(f"{field_name} must be an integer.")
-
         if x < min_value or x > max_value:
             raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
         return x
@@ -101,6 +91,15 @@ class MenuFrame(tk.Frame):
             return
 
         self.on_start(mode, num_questions, max_fret)
+
+    def _heatmap_clicked(self) -> None:
+        try:
+            max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
+        except ValueError as e:
+            messagebox.showerror("Invalid settings", str(e))
+            return
+
+        self.on_heatmap(max_fret)
 
     def _show_stats(self) -> None:
         self.stats = load_stats(self.stats_path)

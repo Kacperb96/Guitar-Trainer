@@ -18,6 +18,9 @@ class Stats:
     by_note: dict[str, dict[str, int]] = field(default_factory=dict)
     by_string: dict[str, dict[str, int]] = field(default_factory=dict)
 
+    # NEW: per-position statistics for heatmap (key: "string,fret")
+    by_position: dict[str, dict[str, int]] = field(default_factory=dict)
+
     # -------- recording --------
 
     def record_attempt(
@@ -40,6 +43,29 @@ class Stats:
         self._record_bucket(self.by_mode, mode, correct)
         self._record_bucket(self.by_note, note_name, correct)
         self._record_bucket(self.by_string, str(string_index), correct)
+
+    def record_position_attempt(
+        self,
+        *,
+        correct: bool,
+        note_name: str,
+        string_index: int,
+        fret: int,
+    ) -> None:
+        """
+        Mode A helper: record stats per (string,fret) position for heatmap.
+        """
+        if fret < 0:
+            raise ValueError("fret must be >= 0")
+        # this records totals + by_mode/by_note/by_string
+        self.record_attempt(
+            mode="A",
+            correct=correct,
+            note_name=note_name,
+            string_index=string_index,
+        )
+        key = f"{string_index},{fret}"
+        self._record_bucket(self.by_position, key, correct)
 
     def record_attempt_mode_b(
         self,
@@ -78,6 +104,7 @@ class Stats:
             "by_mode": self.by_mode,
             "by_note": self.by_note,
             "by_string": self.by_string,
+            "by_position": self.by_position,
         }
 
     @classmethod
@@ -88,6 +115,7 @@ class Stats:
             by_mode=data.get("by_mode", {}),
             by_note=data.get("by_note", {}),
             by_string=data.get("by_string", {}),
+            by_position=data.get("by_position", {}),
         )
 
     # -------- presentation --------
@@ -120,9 +148,10 @@ class Stats:
             reverse=True,
         )[:5]:
             acc = 100 * data["correct"] / data["attempts"]
-            lines.append(
-                f"  {note}: {data['attempts']} attempts ({acc:.1f}%)"
-            )
+            lines.append(f"  {note}: {data['attempts']} attempts ({acc:.1f}%)")
+
+        lines.append("")
+        lines.append(f"Heatmap data points (positions): {len(self.by_position)}")
 
         return "\n".join(lines)
 

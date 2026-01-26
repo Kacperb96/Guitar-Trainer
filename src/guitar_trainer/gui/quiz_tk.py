@@ -14,13 +14,6 @@ from guitar_trainer.gui.fretboard import Fretboard, Position
 
 
 class NoteQuizFrame(tk.Frame):
-    """
-    GUI Mode A:
-    - show a dot at a random (string,fret)
-    - user types note name and submits
-    - keeps score, saves stats
-    """
-
     def __init__(
         self,
         master: tk.Misc,
@@ -79,7 +72,6 @@ class NoteQuizFrame(tk.Frame):
         self.next_question()
 
     def _back(self) -> None:
-        # Save stats before leaving
         save_stats(self.stats_path, self.stats)
         self.on_back()
 
@@ -111,12 +103,13 @@ class NoteQuizFrame(tk.Frame):
         user_answer = self.answer_var.get()
         correct = check_note_name_answer(self.current_correct_name, user_answer)
 
-        string_index, _fret = self.current_position
-        self.stats.record_attempt(
-            mode="A",
+        string_index, fret = self.current_position
+        # NEW: record per-position
+        self.stats.record_position_attempt(
             correct=correct,
             note_name=self.current_correct_name,
             string_index=string_index,
+            fret=fret,
         )
 
         if correct:
@@ -138,14 +131,6 @@ class NoteQuizFrame(tk.Frame):
 
 
 class PositionsQuizFrame(tk.Frame):
-    """
-    GUI Mode B:
-    - show target note name
-    - user clicks ALL positions
-    - submit checks and highlights results
-    - saves stats
-    """
-
     def __init__(
         self,
         master: tk.Misc,
@@ -231,9 +216,7 @@ class PositionsQuizFrame(tk.Frame):
         self.target_note_index = self.rng.randint(0, 11)
         self.target_note_name = index_to_name(self.target_note_index)
 
-        self.task.config(
-            text=f"Click ALL positions for note {self.target_note_name} (up to fret {self.max_fret})."
-        )
+        self.task.config(text=f"Click ALL positions for note {self.target_note_name} (up to fret {self.max_fret}).")
 
     def clear_selection(self) -> None:
         if self.locked:

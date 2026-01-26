@@ -6,7 +6,7 @@ from guitar_trainer.core.notes import index_to_name
 from guitar_trainer.core.tuning import STANDARD_TUNING
 
 
-Position = Tuple[int, int]  # (string_index, fret) in CORE convention: 0=low E ... 5=high e
+Position = Tuple[int, int]  # (string_index, fret) core: 0=low E ... 5=high e
 
 
 def pixel_to_position(
@@ -19,18 +19,8 @@ def pixel_to_position(
     fret_width: int,
     string_spacing: int,
 ) -> Optional[Position]:
-    """
-    Convert canvas pixel coordinates to (string_index, fret).
-
-    GUI orientation:
-      - top line = high e (core string_index = 5)
-      - bottom line = low E (core string_index = 0)
-
-    fret: 0..num_frets
-    Returns None if click is outside the fretboard area.
-    """
     left = margin_x
-    right = margin_x + (num_frets + 1) * fret_width  # +1 open-string area
+    right = margin_x + (num_frets + 1) * fret_width
     top = margin_y
     bottom = margin_y + 5 * string_spacing
 
@@ -45,6 +35,7 @@ def pixel_to_position(
     if gui_row < 0 or gui_row > 5:
         return None
 
+    # GUI: top = high e => core string 5
     string_index = 5 - int(gui_row)
     return int(string_index), int(fret)
 
@@ -58,13 +49,6 @@ def position_to_pixel_center(
     fret_width: int,
     string_spacing: int,
 ) -> Tuple[int, int]:
-    """
-    Return center (x,y) in pixels for a given (string_index, fret) cell.
-
-    GUI orientation:
-      - top row represents core string_index=5
-      - bottom row represents core string_index=0
-    """
     x = margin_x + fret * fret_width + fret_width // 2
     gui_row = 5 - string_index
     y = margin_y + gui_row * string_spacing
@@ -72,24 +56,13 @@ def position_to_pixel_center(
 
 
 class Fretboard(tk.Frame):
-    """
-    A simple fretboard canvas widget.
-
-    - Draws a 6-string fretboard up to num_frets.
-    - GUI orientation: high e on top, low E on bottom.
-    - String numbers on the left: 1 at top (high e) ... 6 at bottom (low E).
-    - Open-string area (fret=0) is visually highlighted.
-    - Can optionally report clicks via a callback.
-    - Supports highlighting a single position (Mode A) and multiple positions (Mode B).
-    """
-
     def __init__(
         self,
         master: tk.Misc,
         *,
         num_frets: int = 12,
         tuning=STANDARD_TUNING,
-        margin_x: int = 30,   # slightly bigger to fit string numbers
+        margin_x: int = 30,
         margin_y: int = 20,
         fret_width: int = 50,
         string_spacing: int = 30,
@@ -105,7 +78,7 @@ class Fretboard(tk.Frame):
         self.string_spacing = string_spacing
 
         width = margin_x * 2 + (num_frets + 1) * fret_width
-        height = margin_y * 2 + 5 * string_spacing + 20  # space for fret numbers
+        height = margin_y * 2 + 5 * string_spacing + 20
 
         self.canvas = tk.Canvas(self, width=width, height=height, bg="white")
         self.canvas.pack(side=tk.TOP)
@@ -115,6 +88,7 @@ class Fretboard(tk.Frame):
 
         self._single_marker_id: int | None = None
         self._cell_markers: dict[Position, int] = {}
+        self._heatmap_ids: list[int] = []
         self._click_callback: Callable[[Position], None] | None = None
 
         self.draw()
@@ -125,90 +99,90 @@ class Fretboard(tk.Frame):
     def set_click_callback(self, callback: Callable[[Position], None] | None) -> None:
         self._click_callback = callback
 
-    def draw(self) -> None:
-        board_left = self.margin_x
-        board_right = self.margin_x + (self.num_frets + 1) * self.fret_width
-        board_top = self.margin_y
-        board_bottom = self.margin_y + 5 * self.string_spacing
+    def _board_bounds(self) -> tuple[int, int, int, int]:
+        left = self.margin_x
+        right = self.margin_x + (self.num_frets + 1) * self.fret_width
+        top = self.margin_y
+        bottom = self.margin_y + 5 * self.string_spacing
+        return left, right, top, bottom
 
-        # --- Highlight open-string area (fret 0 segment) ---
-        # This is the rectangle between the left border and the nut line.
+    def clear_heatmap(self) -> None:
+        for _id in self._heatmap_ids:
+            self.canvas.delete(_id)
+        self._heatmap_ids.clear()
+
+    def set_heatmap_cell(self, position: Position, *, fill: str) -> None:
+        """
+        Draw a colored rectangle for a given cell (string,fret).
+        This is drawn behind strings/frets.
+        """
+        left, right, top, bottom = self._board_bounds()
+        string_index, fret = position
+        gui_row = 5 - string_index
+
+        x0 = left + fret * self.fret_width
+        x1 = x0 + self.fret_width
+
+        # band around the string line
+        y_center = top + gui_row * self.string_spacing
+        half = self.string_spacing // 2
+        y0 = max(top, y_center - half)
+        y1 = min(bottom, y_center + half)
+
+        rid = self.canvas.create_rectangle(x0, y0, x1, y1, outline="", fill=fill, tags=("heatmap",))
+        self._heatmap_ids.append(rid)
+        self.canvas.tag_lower(rid)  # send behind everything
+
+    def draw(self) -> None:
+        board_left, board_right, board_top, board_bottom = self._board_bounds()
+
+        # open-string area
         open_left = board_left
         open_right = board_left + self.fret_width
         self.canvas.create_rectangle(
-            open_left,
-            board_top,
-            open_right,
-            board_bottom,
-            outline="",
-            fill="#f2f2f2",  # light gray to distinguish open-string area
+            open_left, board_top, open_right, board_bottom,
+            outline="", fill="#f2f2f2",
         )
 
-        # --- Draw frets (vertical lines) ---
-        # f=0 is the very left border line
-        for f in range(self.num_frets + 2):  # +1 open area, +1 last line
+        # frets
+        for f in range(self.num_frets + 2):
             x = board_left + f * self.fret_width
             self.canvas.create_line(
                 x, board_top, x, board_bottom,
                 width=2 if f == 0 else 1,
             )
 
-        # --- Draw nut line (between open area and fret 1) thicker ---
+        # nut line
         nut_x = board_left + self.fret_width
         self.canvas.create_line(nut_x, board_top, nut_x, board_bottom, width=4)
 
-        # --- Draw strings (horizontal lines) as GUI rows 0..5 (top..bottom) ---
+        # strings (GUI rows)
         for gui_row in range(6):
             y = self.margin_y + gui_row * self.string_spacing
-            self.canvas.create_line(
-                board_left,
-                y,
-                board_right,
-                y,
-                width=2,
-            )
+            self.canvas.create_line(board_left, y, board_right, y, width=2)
 
-        # --- String numbers on the left (1 at top = high e) ---
-        # Place them slightly left from the board.
+        # string numbers on the left (1 at top = high e)
         label_x = board_left - 10
         for gui_row in range(6):
             y = self.margin_y + gui_row * self.string_spacing
-            string_number = gui_row + 1  # 1..6 top->bottom
-            self.canvas.create_text(
-                label_x,
-                y,
-                text=str(string_number),
-                fill="gray",
-                anchor="e",
-            )
+            self.canvas.create_text(label_x, y, text=str(gui_row + 1), fill="gray", anchor="e")
 
-        # --- Fret numbers below ---
+        # fret numbers
         for f in [0, 3, 5, 7, 9, 12, 15, 17, 19, 21, 24]:
             if f <= self.num_frets:
                 x = board_left + f * self.fret_width + self.fret_width // 2
-                self.canvas.create_text(
-                    x,
-                    board_bottom + 12,
-                    text=str(f),
-                    fill="gray",
-                )
+                self.canvas.create_text(x, board_bottom + 12, text=str(f), fill="gray")
 
-    # ---------- highlighting ----------
+    # ---------- markers ----------
 
     def highlight_position(self, position: Position) -> None:
-        """Mode A: show exactly one dot marker."""
         self.clear_single_highlight()
-
         string_index, fret = position
         cx, cy = position_to_pixel_center(
-            string_index,
-            fret,
-            margin_x=self.margin_x,
-            margin_y=self.margin_y,
-            fret_width=self.fret_width,
-            string_spacing=self.string_spacing,
+            string_index, fret,
+            margin_x=self.margin_x, margin_y=self.margin_y,
+            fret_width=self.fret_width, string_spacing=self.string_spacing,
         )
-
         r = max(6, self.string_spacing // 4)
         self._single_marker_id = self.canvas.create_oval(
             cx - r, cy - r, cx + r, cy + r, outline="black", width=2
@@ -220,55 +194,43 @@ class Fretboard(tk.Frame):
             self._single_marker_id = None
 
     def set_cell_marker(self, position: Position, *, outline: str = "black") -> None:
-        """Mode B: draw/update a marker for a specific cell."""
         self.clear_cell_marker(position)
-
         string_index, fret = position
         cx, cy = position_to_pixel_center(
-            string_index,
-            fret,
-            margin_x=self.margin_x,
-            margin_y=self.margin_y,
-            fret_width=self.fret_width,
-            string_spacing=self.string_spacing,
+            string_index, fret,
+            margin_x=self.margin_x, margin_y=self.margin_y,
+            fret_width=self.fret_width, string_spacing=self.string_spacing,
         )
         r = max(5, self.string_spacing // 5)
-        marker_id = self.canvas.create_oval(
-            cx - r, cy - r, cx + r, cy + r, outline=outline, width=2
-        )
-        self._cell_markers[position] = marker_id
+        mid = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline=outline, width=2)
+        self._cell_markers[position] = mid
 
     def clear_cell_marker(self, position: Position) -> None:
-        marker_id = self._cell_markers.pop(position, None)
-        if marker_id is not None:
-            self.canvas.delete(marker_id)
+        mid = self._cell_markers.pop(position, None)
+        if mid is not None:
+            self.canvas.delete(mid)
 
     def clear_all_cell_markers(self) -> None:
-        for marker_id in self._cell_markers.values():
-            self.canvas.delete(marker_id)
+        for mid in self._cell_markers.values():
+            self.canvas.delete(mid)
         self._cell_markers.clear()
 
     # ---------- click handling ----------
 
     def on_click(self, event: tk.Event) -> None:
         pos = pixel_to_position(
-            event.x,
-            event.y,
+            event.x, event.y,
             num_frets=self.num_frets,
-            margin_x=self.margin_x,
-            margin_y=self.margin_y,
-            fret_width=self.fret_width,
-            string_spacing=self.string_spacing,
+            margin_x=self.margin_x, margin_y=self.margin_y,
+            fret_width=self.fret_width, string_spacing=self.string_spacing,
         )
-
         if pos is None:
             self.status.config(text="Clicked outside the fretboard")
             return
 
-        string_index, fret = pos
-        note_idx = note_index_at(string_index, fret, self.tuning)
-        note_name = index_to_name(note_idx)
-        self.status.config(text=f"Clicked: string={string_index} fret={fret} note={note_name}")
+        s, f = pos
+        note_idx = note_index_at(s, f, self.tuning)
+        self.status.config(text=f"Clicked: string={s} fret={f} note={index_to_name(note_idx)}")
 
         if self._click_callback is not None:
             self._click_callback(pos)
