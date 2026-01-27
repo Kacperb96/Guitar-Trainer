@@ -37,6 +37,9 @@ class MenuFrame(tk.Frame):
         tk.Radiobutton(mode_box, text="Mode B: Find all positions", variable=self.mode_var, value="B").pack(
             anchor="w", padx=10, pady=2
         )
+        tk.Radiobutton(mode_box, text="Adaptive (Mode A): Focus weak positions", variable=self.mode_var, value="ADAPT").pack(
+            anchor="w", padx=10, pady=2
+        )
 
         settings = tk.LabelFrame(self, text="Settings")
         settings.pack(fill="x", padx=10, pady=6)
@@ -62,7 +65,7 @@ class MenuFrame(tk.Frame):
 
         hint = tk.Label(
             self,
-            text="Strings: 1 (top, high e) ... 6 (bottom, low E). Heatmap is based on Mode A questions.",
+            text="Strings: 1 (top, high e) ... 6 (bottom, low E). Heatmap/adaptive uses Mode A per-position stats.",
             fg="gray",
         )
         hint.pack(pady=(5, 0))
@@ -86,8 +89,8 @@ class MenuFrame(tk.Frame):
             messagebox.showerror("Invalid settings", str(e))
             return
 
-        if mode not in {"A", "B"}:
-            messagebox.showerror("Invalid mode", "Mode must be A or B.")
+        if mode not in {"A", "B", "ADAPT"}:
+            messagebox.showerror("Invalid mode", "Mode must be A, B or ADAPT.")
             return
 
         self.on_start(mode, num_questions, max_fret)

@@ -2,7 +2,7 @@ import tkinter as tk
 
 from guitar_trainer.core.stats import load_stats
 from guitar_trainer.gui.menu_tk import MenuFrame
-from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame
+from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame, AdaptiveNoteQuizFrame
 from guitar_trainer.gui.stats_view_tk import StatsHeatmapFrame
 
 STATS_PATH = "stats.json"
@@ -39,8 +39,17 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 on_back=show_menu,
             )
-        else:
+        elif mode == "B":
             frame = PositionsQuizFrame(
+                root,
+                stats=stats,
+                stats_path=STATS_PATH,
+                num_questions=num_questions,
+                max_fret=max_fret,
+                on_back=show_menu,
+            )
+        else:  # ADAPT
+            frame = AdaptiveNoteQuizFrame(
                 root,
                 stats=stats,
                 stats_path=STATS_PATH,

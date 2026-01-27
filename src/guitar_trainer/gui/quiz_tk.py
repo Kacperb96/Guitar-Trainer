@@ -1,6 +1,7 @@
 import random
 import tkinter as tk
 
+from guitar_trainer.core.adaptive import choose_adaptive_position
 from guitar_trainer.core.mapping import positions_for_note
 from guitar_trainer.core.notes import index_to_name
 from guitar_trainer.core.quiz import (
@@ -80,6 +81,9 @@ class NoteQuizFrame(tk.Frame):
             text=f"Question {self.current_index}/{self.num_questions} | Score: {self.score}/{self.current_index}"
         )
 
+    def pick_next_position(self) -> Position:
+        return random_position(self.max_fret, rng=self.rng)
+
     def next_question(self) -> None:
         if self.current_index >= self.num_questions:
             self.finish()
@@ -88,7 +92,7 @@ class NoteQuizFrame(tk.Frame):
         self.current_index += 1
         self.update_progress()
 
-        self.current_position = random_position(self.max_fret, rng=self.rng)
+        self.current_position = self.pick_next_position()
         self.current_correct_name = question_name_at_position(self.current_position)
 
         self.fretboard.highlight_position(self.current_position)
@@ -104,7 +108,6 @@ class NoteQuizFrame(tk.Frame):
         correct = check_note_name_answer(self.current_correct_name, user_answer)
 
         string_index, fret = self.current_position
-        # NEW: record per-position
         self.stats.record_position_attempt(
             correct=correct,
             note_name=self.current_correct_name,
@@ -128,6 +131,26 @@ class NoteQuizFrame(tk.Frame):
         self.feedback.config(text="Saved statistics. You can go back to menu or close the window.")
         self.submit_btn.config(state=tk.DISABLED)
         self.answer_entry.config(state=tk.DISABLED)
+
+
+class AdaptiveNoteQuizFrame(NoteQuizFrame):
+    """
+    Adaptive Mode (Mode A variant):
+    - uses Stats.by_position to prefer weak/unseen positions
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # Update title text
+        # First widget is header row label, easiest is to add extra label:
+        # (Keep it simple: override header by adding a small line)
+        extra = tk.Label(self, text="Adaptive: focuses weak/unseen positions", fg="gray")
+        # place under existing progress label
+        extra.pack(pady=(0, 6))
+        # move it just after progress; packing order: it’s okay visually.
+
+    def pick_next_position(self) -> Position:
+        return choose_adaptive_position(self.stats, self.max_fret, self.rng)
 
 
 class PositionsQuizFrame(tk.Frame):
