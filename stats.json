@@ -1,12 +1,12 @@
 {
   "by_mode": {
     "A": {
-      "attempts": 135,
-      "correct": 124
+      "attempts": 141,
+      "correct": 130
     },
     "B": {
-      "attempts": 6,
-      "correct": 3
+      "attempts": 7,
+      "correct": 4
     }
   },
   "by_note": {
@@ -15,40 +15,40 @@
       "correct": 14
     },
     "A#": {
-      "attempts": 9,
-      "correct": 7
+      "attempts": 11,
+      "correct": 9
     },
     "B": {
       "attempts": 16,
       "correct": 16
     },
     "C": {
-      "attempts": 12,
-      "correct": 12
+      "attempts": 13,
+      "correct": 13
     },
     "C#": {
       "attempts": 9,
       "correct": 9
     },
     "D": {
-      "attempts": 16,
-      "correct": 15
+      "attempts": 17,
+      "correct": 16
     },
     "D#": {
-      "attempts": 10,
-      "correct": 9
+      "attempts": 11,
+      "correct": 10
     },
     "E": {
       "attempts": 13,
       "correct": 12
     },
     "F": {
-      "attempts": 13,
-      "correct": 11
+      "attempts": 14,
+      "correct": 12
     },
     "F#": {
-      "attempts": 10,
-      "correct": 6
+      "attempts": 11,
+      "correct": 7
     },
     "G": {
       "attempts": 8,
@@ -93,8 +93,8 @@
       "correct": 2
     },
     "0,6": {
-      "attempts": 3,
-      "correct": 2
+      "attempts": 4,
+      "correct": 3
     },
     "0,7": {
       "attempts": 3,
@@ -113,8 +113,8 @@
       "correct": 2
     },
     "1,1": {
-      "attempts": 1,
-      "correct": 0
+      "attempts": 2,
+      "correct": 1
     },
     "1,11": {
       "attempts": 2,
@@ -233,8 +233,8 @@
       "correct": 1
     },
     "4,1": {
-      "attempts": 1,
-      "correct": 1
+      "attempts": 2,
+      "correct": 2
     },
     "4,12": {
       "attempts": 1,
@@ -273,16 +273,16 @@
       "correct": 2
     },
     "5,1": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     },
     "5,10": {
-      "attempts": 1,
-      "correct": 0
+      "attempts": 2,
+      "correct": 1
     },
     "5,11": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     },
     "5,12": {
       "attempts": 1,
@@ -311,12 +311,12 @@
   },
   "by_string": {
     "0": {
-      "attempts": 35,
-      "correct": 34
+      "attempts": 36,
+      "correct": 35
     },
     "1": {
-      "attempts": 22,
-      "correct": 21
+      "attempts": 23,
+      "correct": 22
     },
     "2": {
       "attempts": 19,
@@ -327,14 +327,14 @@
       "correct": 16
     },
     "4": {
-      "attempts": 21,
-      "correct": 18
+      "attempts": 22,
+      "correct": 19
     },
     "5": {
-      "attempts": 20,
-      "correct": 17
+      "attempts": 23,
+      "correct": 20
     }
   },
-  "total_attempts": 141,
-  "total_correct": 127
+  "total_attempts": 148,
+  "total_correct": 134
 }

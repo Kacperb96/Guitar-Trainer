@@ -34,9 +34,14 @@ class Fretboard(tk.Frame):
     MISS = "#ef4444"
     TARGET = "#f59e0b"
 
-    # Question indicator (this is the “red circle” user expects in Mode A)
+    # Question indicator (Mode A)
     QUESTION = "#ef4444"
     QUESTION_SHADOW = "#35181a"
+
+    # Heatmap palette (high contrast on dark bg)
+    HEAT_LOW = "#2563eb"   # blue
+    HEAT_MID = "#f59e0b"   # amber/yellow
+    HEAT_HIGH = "#ef4444"  # red
 
     def __init__(
         self,
@@ -72,6 +77,9 @@ class Fretboard(tk.Frame):
         self._cell_markers: dict[Position, str] = {}
         self._heatmap_values: dict[Position, float] = {}
 
+        # When heatmap is active we hide string labels + toggle (requested UX).
+        self._heatmap_mode: bool = False
+
         # left gutter labels: numbers (1..N) or open-string note names
         self._string_labels_mode: str = "numbers"
         self._toggle_labels_btn = ttk.Button(self.canvas, text="NUM", command=self._toggle_string_labels, width=6)
@@ -95,12 +103,11 @@ class Fretboard(tk.Frame):
     def set_cell_marker(self, pos: Position, color: str | None = None, **kwargs) -> None:
         """
         Backwards-compatible:
-        - set_cell_marker(pos, "red")
-        - set_cell_marker(pos, outline="red")
+          - set_cell_marker(pos, "red")
+          - set_cell_marker(pos, outline="red")
         Ignores other kwargs safely.
         """
         if color is None:
-            # Old code passes outline="red"
             color = kwargs.get("outline") or kwargs.get("fill") or self.MUTED
         self._cell_markers[pos] = str(color)
         self.redraw()
@@ -169,42 +176,72 @@ class Fretboard(tk.Frame):
 
     def set_heatmap(self, values: dict[Position, float]) -> None:
         self._heatmap_values = dict(values)
+        self._heatmap_mode = True
         self.redraw()
 
     def clear_heatmap(self) -> None:
         self._heatmap_values.clear()
+        self._heatmap_mode = False
         self.redraw()
 
+    # ----------------------------
+    # Heatmap coloring (better)
+    # ----------------------------
+    def _hex_to_rgb(self, hx: str) -> tuple[int, int, int]:
+        hx = hx.lstrip("#")
+        return int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
+
+    def _rgb_to_hex(self, r: int, g: int, b: int) -> str:
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lerp(self, a: float, b: float, t: float) -> float:
+        return a + (b - a) * t
+
+    def _lerp_color(self, c1: str, c2: str, t: float) -> str:
+        t = max(0.0, min(1.0, float(t)))
+        r1, g1, b1 = self._hex_to_rgb(c1)
+        r2, g2, b2 = self._hex_to_rgb(c2)
+        r = int(self._lerp(r1, r2, t))
+        g = int(self._lerp(g1, g2, t))
+        b = int(self._lerp(b1, b2, t))
+        return self._rgb_to_hex(r, g, b)
+
+    def _heat_color(self, v: float) -> str:
+        v = max(0.0, min(1.0, float(v)))
+        if v <= 0.5:
+            return self._lerp_color(self.HEAT_LOW, self.HEAT_MID, v / 0.5)
+        return self._lerp_color(self.HEAT_MID, self.HEAT_HIGH, (v - 0.5) / 0.5)
+
+    def _heat_outline(self, v: float) -> str:
+        v = max(0.0, min(1.0, float(v)))
+        bright = "#94a3b8"
+        return self._lerp_color(self.BORDER, bright, v)
+
+    # ----------------------------
+    # Click mapping (precise)
+    # ----------------------------
     def _pixel_to_position_effective(self, x: float, y: float) -> Position | None:
-        """
-        Convert canvas pixel -> (string_index, fret) using the SAME geometry as redraw().
-        This fixes click precision when we vertically center / clamp spacing.
-        """
         w = max(1, self.canvas.winfo_width())
         h = max(1, self.canvas.winfo_height())
-        layout, spacing, top_y, half_band, band_top, band_bot = self._effective_layout(w, h)
+        layout, spacing, top_y, _half_band, band_top, band_bot = self._effective_layout(w, h)
 
-        # vertical bounds
         if y < band_top or y > band_bot:
             return None
 
-        # horizontal bounds
         left_x = layout.margin_x
         nut_x1 = layout.margin_x + layout.nut_width
         right_x = nut_x1 + layout.num_frets * layout.fret_width
         if x < left_x or x > right_x:
             return None
 
-        # string (nearest)
         if self.num_strings == 1:
             gui_row = 0
         else:
             gui_row = int(round((y - top_y) / spacing))
             gui_row = max(0, min(self.num_strings - 1, gui_row))
 
-        string_index = (self.num_strings - 1) - gui_row  # back to core index
+        string_index = (self.num_strings - 1) - gui_row
 
-        # fret
         if x <= nut_x1:
             fret = 0
         else:
@@ -217,11 +254,9 @@ class Fretboard(tk.Frame):
     def _on_click(self, e: tk.Event) -> None:
         if not self._click_cb:
             return
-
         pos = self._pixel_to_position_effective(float(e.x), float(e.y))
         if pos is None:
             return
-
         self._click_cb(pos)
 
     def redraw(self) -> None:
@@ -235,8 +270,12 @@ class Fretboard(tk.Frame):
         nut_x1 = layout.margin_x + layout.nut_width
         right_x = nut_x1 + layout.num_frets * layout.fret_width
 
-        # gutter
-        gutter_w = 60
+        # When heatmap is active: hide labels + toggle and use a much slimmer gutter
+        if self._heatmap_mode:
+            gutter_w = 14
+        else:
+            gutter_w = 60
+
         gutter_x0 = max(0, left_x - gutter_w - 12)
         gutter_x1 = left_x - 12
 
@@ -246,31 +285,26 @@ class Fretboard(tk.Frame):
         self.canvas.create_rectangle(gutter_x0, band_top, gutter_x1, band_bot, outline="", fill=self.GUTTER_BG)
         self.canvas.create_line(gutter_x1, band_top, gutter_x1, band_bot, fill=self.BORDER, width=2)
 
-        # Toggle button
-        self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTE")
-        btn_cx = gutter_x0 + (gutter_w / 2)
-        btn_y = max(12, band_top - 18)
-        self.canvas.create_window(btn_cx, btn_y, window=self._toggle_labels_btn, anchor="center")
+        # Toggle button (NOT in heatmap view)
+        if not self._heatmap_mode:
+            self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTY")
+            btn_cx = gutter_x0 + (gutter_w / 2)
+            btn_y = max(12, band_top - 18)
+            self.canvas.create_window(btn_cx, btn_y, window=self._toggle_labels_btn, anchor="center")
 
         # open + board
         self.canvas.create_rectangle(left_x, band_top, nut_x1, band_bot, outline="", fill=self.OPEN_BG)
         self.canvas.create_rectangle(nut_x1, band_top, right_x, band_bot, outline="", fill=self.BOARD_BG)
         self.canvas.create_rectangle(left_x, band_top, right_x, band_bot, outline=self.BORDER, width=2)
 
-        # heatmap
+        # heatmap (high-contrast)
         if self._heatmap_values:
             for (s, f), v in self._heatmap_values.items():
                 if not (0 <= s < self.num_strings and 0 <= f <= self.num_frets):
                     continue
                 v = max(0.0, min(1.0, float(v)))
-                if v < 0.15:
+                if v <= 0.02:
                     continue
-                if v < 0.35:
-                    color = "#2a1a20"
-                elif v < 0.60:
-                    color = "#3a1b27"
-                else:
-                    color = "#541c31"
 
                 rect = position_to_rect(layout, s, f)
                 if rect is None:
@@ -282,7 +316,9 @@ class Fretboard(tk.Frame):
                 y0 = y - half_band
                 y1 = y + half_band
 
-                self.canvas.create_rectangle(x0, y0, x1, y1, outline="", fill=color)
+                fill = self._heat_color(v)
+                outline = self._heat_outline(v)
+                self.canvas.create_rectangle(x0, y0, x1, y1, outline=outline, width=1, fill=fill)
 
         # nut + frets
         self.canvas.create_line(nut_x1, band_top, nut_x1, band_bot, fill=self.NUT_LINE, width=4)
@@ -310,7 +346,7 @@ class Fretboard(tk.Frame):
             else:
                 dot(mid_y)
 
-        # strings + labels
+        # strings + labels (labels NOT in heatmap view)
         for gui_row in range(self.num_strings):
             y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
 
@@ -321,6 +357,9 @@ class Fretboard(tk.Frame):
 
             self.canvas.create_line(left_x, y + 1, right_x, y + 1, fill=self.STRING_SHADOW, width=width_px)
             self.canvas.create_line(left_x, y, right_x, y, fill=self.STRING, width=width_px)
+
+            if self._heatmap_mode:
+                continue
 
             if self._string_labels_mode == "numbers":
                 label = str(gui_row + 1)
@@ -346,7 +385,7 @@ class Fretboard(tk.Frame):
                 font=("Segoe UI", 11, "bold"),
             )
 
-        # cell markers (hit/miss/etc)
+        # cell markers
         for (s, f), color in self._cell_markers.items():
             rect = position_to_rect(layout, s, f)
             if rect is None:
@@ -364,7 +403,7 @@ class Fretboard(tk.Frame):
 
             self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=c, outline="")
 
-        # single highlight (QUESTION indicator) -> filled red circle (as before)
+        # single highlight (question) -> filled red circle
         if self._single_highlight is not None:
             s, f = self._single_highlight
             rect = position_to_rect(layout, s, f)
@@ -379,9 +418,10 @@ class Fretboard(tk.Frame):
                 cx, cy = self._cell_center(x0, y0, x1, y1)
                 r = self._dot_radius(x0, y0, x1, y1, scale=0.30)
 
-                # shadow
-                self.canvas.create_oval(cx - r + 1, cy - r + 1, cx + r + 1, cy + r + 1, fill=self.QUESTION_SHADOW, outline="")
-                # fill
+                self.canvas.create_oval(
+                    cx - r + 1, cy - r + 1, cx + r + 1, cy + r + 1,
+                    fill=self.QUESTION_SHADOW, outline=""
+                )
                 self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=self.QUESTION, outline="")
 
         # fret numbers
