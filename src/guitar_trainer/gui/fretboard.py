@@ -1,5 +1,5 @@
 import tkinter as tk
-from typing import Callable, Optional, Tuple
+from typing import Callable, Tuple
 
 from guitar_trainer.core.mapping import note_index_at
 from guitar_trainer.core.notes import index_to_name
@@ -94,10 +94,16 @@ class Fretboard(tk.Frame):
         self.redraw()
 
     def redraw(self) -> None:
+        """
+        Layer order (bottom -> top):
+        1) heatmap
+        2) fretboard base (frets, nut, dots, strings, labels)
+        3) quiz markers (circles)
+        """
         self.canvas.delete("all")
-        self._draw_base()
-        self._draw_heatmap()
-        self._draw_markers()
+        self._draw_heatmap()   # <- FIRST layer
+        self._draw_base()      # <- then frets/strings/dots on top
+        self._draw_markers()   # <- markers on top of everything
 
     def _board_bounds(self) -> tuple[int, int, int, int]:
         left = self.margin_x
@@ -112,26 +118,19 @@ class Fretboard(tk.Frame):
         single dots: 3,5,7,9,15,17,19,21
         double dots: 12,24
         """
-        left, _right, top, bottom = self._board_bounds()
+        left, _right, top, _bottom = self._board_bounds()
 
-        # Typical marker frets
         single = {3, 5, 7, 9, 15, 17, 19, 21}
         double = {12, 24}
 
-        # radius scales with geometry
         r = max(4, min(self.fret_width, self.string_spacing) // 6)
 
-        # y positions (between string lines):
-        # single dot centered between the middle strings
         y_single = top + int(2.5 * self.string_spacing)
-
-        # double dots a bit above/below center (between gaps)
         y_double_a = top + int(1.5 * self.string_spacing)
         y_double_b = top + int(3.5 * self.string_spacing)
 
         for fret in range(0, self.num_frets + 1):
             if fret in single or fret in double:
-                # dot is usually in the middle of the fret "cell"
                 x = left + fret * self.fret_width + self.fret_width // 2
 
                 if fret in double:
@@ -168,7 +167,7 @@ class Fretboard(tk.Frame):
         nut_x = left + self.fret_width
         self.canvas.create_line(nut_x, top, nut_x, bottom, width=4)
 
-        # position marker dots (draw BEFORE strings so strings look "on top")
+        # fretboard dots (should be above heatmap, below strings)
         self._draw_fret_dots()
 
         # strings + string numbers (1 at top)
@@ -191,8 +190,6 @@ class Fretboard(tk.Frame):
         return x, y
 
     def _draw_heatmap(self) -> None:
-        # heatmap rectangles behind strings/frets: draw them first-ish, but after base is ok;
-        # they will still sit "under" markers because markers are drawn last.
         left, _, top, bottom = self._board_bounds()
 
         for (s, f), fill in self._heatmap.items():
