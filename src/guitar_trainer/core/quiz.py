@@ -4,7 +4,7 @@ import random
 from typing import Tuple
 
 from guitar_trainer.core.tuning import STANDARD_TUNING
-from guitar_trainer.core.notes import index_to_name
+from guitar_trainer.core.notes import index_to_name, parse_note_name
 from guitar_trainer.core.mapping import note_index_at, positions_for_note
 
 Position = Tuple[int, int]  # (string_index, fret)
@@ -25,9 +25,16 @@ def question_name_at_position(position: Position, tuning: list[int] = STANDARD_T
 
 
 def check_note_name_answer(correct_name: str, user_answer: str) -> bool:
-    user = user_answer.strip().upper()
-    correct = correct_name.strip().upper()
-    return user == correct
+    """
+    Accept enharmonic equivalents:
+      D# == Eb, G# == Ab, A# == Bb, etc.
+    """
+    correct_idx = parse_note_name(correct_name)
+    user_idx = parse_note_name(user_answer)
+
+    if correct_idx is None or user_idx is None:
+        return False
+    return correct_idx == user_idx
 
 
 def check_positions_answer(

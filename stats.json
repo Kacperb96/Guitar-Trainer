@@ -1,8 +1,8 @@
 {
   "by_mode": {
     "A": {
-      "attempts": 103,
-      "correct": 98
+      "attempts": 106,
+      "correct": 101
     },
     "B": {
       "attempts": 1,
@@ -47,16 +47,16 @@
       "correct": 9
     },
     "F#": {
-      "attempts": 4,
-      "correct": 2
+      "attempts": 5,
+      "correct": 3
     },
     "G": {
-      "attempts": 5,
-      "correct": 5
+      "attempts": 6,
+      "correct": 6
     },
     "G#": {
-      "attempts": 5,
-      "correct": 5
+      "attempts": 6,
+      "correct": 6
     }
   },
   "by_position": {
@@ -76,7 +76,15 @@
       "attempts": 2,
       "correct": 2
     },
+    "0,2": {
+      "attempts": 1,
+      "correct": 1
+    },
     "0,3": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "0,4": {
       "attempts": 1,
       "correct": 1
     },
@@ -161,8 +169,8 @@
       "correct": 1
     },
     "2,5": {
-      "attempts": 2,
-      "correct": 2
+      "attempts": 3,
+      "correct": 3
     },
     "2,7": {
       "attempts": 3,
@@ -279,16 +287,16 @@
   },
   "by_string": {
     "0": {
-      "attempts": 28,
-      "correct": 28
+      "attempts": 30,
+      "correct": 30
     },
     "1": {
       "attempts": 15,
       "correct": 15
     },
     "2": {
-      "attempts": 17,
-      "correct": 16
+      "attempts": 18,
+      "correct": 17
     },
     "3": {
       "attempts": 12,
@@ -303,6 +311,6 @@
       "correct": 15
     }
   },
-  "total_attempts": 104,
-  "total_correct": 99
+  "total_attempts": 107,
+  "total_correct": 102
 }
