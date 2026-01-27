@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 
-from guitar_trainer.gui.theme import BG
 from guitar_trainer.core.stats import Stats, load_stats, save_stats
 from guitar_trainer.core.tuning import (
     get_tuning_presets,
@@ -56,8 +55,8 @@ class MenuFrame(ttk.Frame):
         ttk.Label(left, text="Guitar Trainer", style="Title.TLabel").pack(anchor="w")
         ttk.Label(left, text="Dark • Modern • Practice-focused", style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
 
-        # Mode box
-        mode_box = ttk.Labelframe(left, text="Mode")
+        # Mode box (NO BORDER)
+        mode_box = ttk.Labelframe(left, text="Mode", style="Side.TLabelframe")
         mode_box.pack(fill="x", pady=(0, 12))
 
         ttk.Radiobutton(mode_box, text="Mode A — Guess the note", variable=self.mode_var, value="A").pack(anchor="w", pady=2)
@@ -65,8 +64,8 @@ class MenuFrame(ttk.Frame):
         ttk.Radiobutton(mode_box, text="Adaptive (Mode A)", variable=self.mode_var, value="ADAPT").pack(anchor="w", pady=2)
         ttk.Radiobutton(mode_box, text="Practice Session (timed)", variable=self.mode_var, value="PRACTICE").pack(anchor="w", pady=2)
 
-        # Settings box
-        settings = ttk.Labelframe(left, text="Settings")
+        # Settings box (NO BORDER)
+        settings = ttk.Labelframe(left, text="Settings", style="Side.TLabelframe")
         settings.pack(fill="x", pady=(0, 12))
 
         def row(parent, label: str):
@@ -94,8 +93,8 @@ class MenuFrame(ttk.Frame):
         r5 = row(settings, "Max fret")
         ttk.Entry(r5, textvariable=self.max_fret_var, width=8).pack(side="right")
 
-        # Custom tuning box (shows only when Custom... is selected)
-        custom_box = ttk.Labelframe(left, text="Custom tuning")
+        # Custom tuning box (NO BORDER)
+        custom_box = ttk.Labelframe(left, text="Custom tuning", style="Side.TLabelframe")
         custom_box.pack(fill="x", pady=(0, 12))
         ttk.Label(custom_box, text="Lowest → Highest", style="Muted.TLabel").pack(anchor="w")
         self.custom_entry = ttk.Entry(custom_box, textvariable=self.custom_tuning_var)

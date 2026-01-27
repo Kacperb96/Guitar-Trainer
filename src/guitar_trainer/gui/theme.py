@@ -51,9 +51,33 @@ def apply_theme(root: tk.Tk) -> None:
     style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=small_font)
     style.configure("Title.TLabel", background=BG, foreground=TEXT, font=heading_font)
 
-    # Labelframe
-    style.configure("TLabelframe", background=BG, foreground=TEXT, bordercolor=BORDER)
+    # Labelframe (default)
+    # Keep a subtle border for general use
+    style.configure(
+        "TLabelframe",
+        background=BG,
+        foreground=TEXT,
+        bordercolor=BORDER,
+        relief="flat",
+        borderwidth=1,
+    )
     style.configure("TLabelframe.Label", background=BG, foreground=TEXT, font=("Segoe UI", 11, "bold"))
+
+    # Labelframe variant for the left sidebar panels (no visible border)
+    style.configure(
+        "Side.TLabelframe",
+        background=PANEL,
+        foreground=TEXT,
+        bordercolor=PANEL,   # same as background => invisible
+        relief="flat",
+        borderwidth=0,
+    )
+    style.configure(
+        "Side.TLabelframe.Label",
+        background=PANEL,
+        foreground=TEXT,
+        font=("Segoe UI", 11, "bold"),
+    )
 
     # Entry
     style.configure(
