@@ -255,7 +255,7 @@ class PositionsQuizFrame(tk.Frame):
             self.fretboard.clear_cell_marker(position)
         else:
             self.selected.add(position)
-            self.fretboard.set_cell_marker(position, outline="blue")
+            self.fretboard.set_cell_marker(position, outline="red")
         self.feedback.config(text=f"Selected: {len(self.selected)}")
 
     def submit_selection(self) -> None:

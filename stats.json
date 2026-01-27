@@ -1,8 +1,8 @@
 {
   "by_mode": {
     "A": {
-      "attempts": 113,
-      "correct": 107
+      "attempts": 114,
+      "correct": 108
     },
     "B": {
       "attempts": 1,
@@ -23,8 +23,8 @@
       "correct": 14
     },
     "C": {
-      "attempts": 10,
-      "correct": 10
+      "attempts": 11,
+      "correct": 11
     },
     "C#": {
       "attempts": 8,
@@ -125,8 +125,8 @@
       "correct": 1
     },
     "1,3": {
-      "attempts": 1,
-      "correct": 1
+      "attempts": 2,
+      "correct": 2
     },
     "1,4": {
       "attempts": 1,
@@ -303,8 +303,8 @@
       "correct": 31
     },
     "1": {
-      "attempts": 16,
-      "correct": 16
+      "attempts": 17,
+      "correct": 17
     },
     "2": {
       "attempts": 18,
@@ -323,6 +323,6 @@
       "correct": 16
     }
   },
-  "total_attempts": 114,
-  "total_correct": 108
+  "total_attempts": 115,
+  "total_correct": 109
 }
