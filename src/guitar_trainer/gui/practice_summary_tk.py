@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from dataclasses import dataclass
+from typing import List, Tuple
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,10 @@ class PracticeSummary:
     correct: int
     accuracy_percent: float
     avg_time_sec: float
+
+    # items: (label, attempts, accuracy_percent_or_None)
+    weak_strings: List[Tuple[str, int, float | None]]
+    weak_frets: List[Tuple[str, int, float | None]]
 
 
 class PracticeSummaryFrame(tk.Frame):
@@ -38,6 +43,7 @@ class PracticeSummaryFrame(tk.Frame):
         )
         subtitle.pack(pady=(0, 12))
 
+        # ---- Results ----
         card = tk.LabelFrame(self, text="Results")
         card.pack(fill="x", padx=12, pady=8)
 
@@ -52,32 +58,61 @@ class PracticeSummaryFrame(tk.Frame):
         row("Accuracy", f"{summary.accuracy_percent:.1f}%")
         row("Avg response time", f"{summary.avg_time_sec:.2f}s")
 
+        # ---- Weak areas ----
+        weak = tk.LabelFrame(self, text="Weak areas (based on your saved stats)")
+        weak.pack(fill="x", padx=12, pady=8)
+
+        def fmt_item(label: str, attempts: int, acc: float | None) -> str:
+            if attempts == 0:
+                return f"{label}: not practiced yet"
+            if acc is None:
+                return f"{label}: attempts={attempts}"
+            return f"{label}: {acc:.1f}% (attempts={attempts})"
+
+        left = tk.Frame(weak)
+        left.pack(side="left", fill="both", expand=True, padx=10, pady=8)
+
+        right = tk.Frame(weak)
+        right.pack(side="left", fill="both", expand=True, padx=10, pady=8)
+
+        tk.Label(left, text="Weak strings", font=("Arial", 11, "bold")).pack(anchor="w")
+        if summary.weak_strings:
+            for label, attempts, acc in summary.weak_strings:
+                tk.Label(left, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
+        else:
+            tk.Label(left, text="No data yet.", fg="gray").pack(anchor="w")
+
+        tk.Label(right, text="Weak frets", font=("Arial", 11, "bold")).pack(anchor="w")
+        if summary.weak_frets:
+            for label, attempts, acc in summary.weak_frets:
+                tk.Label(right, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
+        else:
+            tk.Label(right, text="No data yet.", fg="gray").pack(anchor="w")
+
+        # ---- Actions ----
         actions = tk.Frame(self)
         actions.pack(pady=14)
 
-        btn_heatmap = tk.Button(
+        tk.Button(
             actions,
             text="Show heatmap",
             width=14,
             command=(lambda: on_show_heatmap(summary.max_fret)) if on_show_heatmap else None,
             state=tk.NORMAL if on_show_heatmap else tk.DISABLED,
-        )
-        btn_heatmap.pack(side="left", padx=6)
+        ).pack(side="left", padx=6)
 
-        btn_repeat = tk.Button(
+        tk.Button(
             actions,
             text="Repeat session",
             width=14,
             command=on_repeat if on_repeat else None,
             state=tk.NORMAL if on_repeat else tk.DISABLED,
-        )
-        btn_repeat.pack(side="left", padx=6)
+        ).pack(side="left", padx=6)
 
-        btn_back = tk.Button(
+        tk.Button(
             actions,
             text="Back to menu",
             width=14,
             command=on_back if on_back else None,
             state=tk.NORMAL if on_back else tk.DISABLED,
-        )
-        btn_back.pack(side="left", padx=6)
+        ).pack(side="left", padx=6)

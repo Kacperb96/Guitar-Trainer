@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import time
 import tkinter as tk
+from typing import List, Tuple
 
 from guitar_trainer.core.adaptive import choose_adaptive_position
 from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
@@ -10,6 +11,36 @@ from guitar_trainer.core.stats import Stats, save_stats
 from guitar_trainer.core.tuning import STANDARD_TUNING
 from guitar_trainer.gui.fretboard import Fretboard, Position
 from guitar_trainer.gui.practice_summary_tk import PracticeSummary
+
+
+def _pos_key(s: int, f: int) -> str:
+    return f"{s},{f}"
+
+
+def _get_attempts_correct(stats: Stats, s: int, f: int) -> tuple[int, int]:
+    data = stats.by_position.get(_pos_key(s, f))
+    if not data:
+        return 0, 0
+    attempts = int(data.get("attempts", 0))
+    correct = int(data.get("correct", 0))
+    return attempts, correct
+
+
+def _rank_weak_items(items: List[Tuple[str, int, float | None]], top_n: int = 3) -> List[Tuple[str, int, float | None]]:
+    """
+    Sorting rule:
+    - not practiced (attempts==0) first
+    - then lowest accuracy
+    - tie-breaker: fewer attempts first
+    """
+    def key_fn(it: Tuple[str, int, float | None]):
+        label, attempts, acc = it
+        not_practiced = 0 if attempts == 0 else 1
+        acc_val = acc if acc is not None else 0.0
+        # attempts==0 should be first, so not_practiced=0 first
+        return (not_practiced, acc_val, attempts)
+
+    return sorted(items, key=key_fn)[:top_n]
 
 
 class PracticeSessionFrame(tk.Frame):
@@ -209,6 +240,48 @@ class PracticeSessionFrame(tk.Frame):
 
         self.after(450, self.next_question)
 
+    # ---------- weak areas computation ----------
+
+    def _compute_weak_strings(self) -> List[Tuple[str, int, float | None]]:
+        items: List[Tuple[str, int, float | None]] = []
+        # core string_index: 5 is high e (GUI string 1)
+        for s in range(6):
+            attempts_sum = 0
+            correct_sum = 0
+            for f in range(self.max_fret + 1):
+                a, c = _get_attempts_correct(self.stats, s, f)
+                attempts_sum += a
+                correct_sum += c
+
+            gui_string_number = 6 - s  # s=5 -> 1, s=0 -> 6
+            label = f"String {gui_string_number}"
+            if attempts_sum == 0:
+                items.append((label, 0, None))
+            else:
+                acc = (correct_sum / attempts_sum) * 100.0
+                items.append((label, attempts_sum, acc))
+
+        return _rank_weak_items(items, top_n=3)
+
+    def _compute_weak_frets(self) -> List[Tuple[str, int, float | None]]:
+        items: List[Tuple[str, int, float | None]] = []
+        for f in range(self.max_fret + 1):
+            attempts_sum = 0
+            correct_sum = 0
+            for s in range(6):
+                a, c = _get_attempts_correct(self.stats, s, f)
+                attempts_sum += a
+                correct_sum += c
+
+            label = f"Fret {f}"
+            if attempts_sum == 0:
+                items.append((label, 0, None))
+            else:
+                acc = (correct_sum / attempts_sum) * 100.0
+                items.append((label, attempts_sum, acc))
+
+        return _rank_weak_items(items, top_n=3)
+
     # ---------- finish ----------
 
     def finish(self) -> None:
@@ -234,12 +307,13 @@ class PracticeSessionFrame(tk.Frame):
             correct=correct,
             accuracy_percent=acc,
             avg_time_sec=avg_time,
+            weak_strings=self._compute_weak_strings(),
+            weak_frets=self._compute_weak_frets(),
         )
 
         if self.on_finish is not None:
             self.on_finish(summary)
         else:
-            # fallback: show text if no summary screen wired
             self.feedback.config(
                 text=(
                     f"Session finished. Answered: {answered}, Correct: {correct} ({acc:.1f}%), "
