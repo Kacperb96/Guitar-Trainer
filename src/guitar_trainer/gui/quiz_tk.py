@@ -26,6 +26,7 @@ class NoteQuizFrame(tk.Frame):
         max_fret: int = 12,
         tuning: list[int] = STANDARD_TUNING,
         tuning_name: str = "E Standard",
+        prefer_flats: bool = False,
         rng_seed: int | None = None,
         on_back=None,
     ) -> None:
@@ -37,6 +38,7 @@ class NoteQuizFrame(tk.Frame):
         self.max_fret = max_fret
         self.tuning = tuning
         self.tuning_name = tuning_name
+        self.prefer_flats = prefer_flats
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
 
@@ -49,7 +51,8 @@ class NoteQuizFrame(tk.Frame):
         header = tk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
 
-        tk.Label(header, text=f"Mode A: Guess the note  |  {self.tuning_name}", font=("Arial", 13)).pack(side="left")
+        display = "Flats" if prefer_flats else "Sharps"
+        tk.Label(header, text=f"Mode A: Guess the note | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
         if self.on_back:
             tk.Button(header, text="Back to menu", command=self._back).pack(side="right")
 
@@ -97,7 +100,11 @@ class NoteQuizFrame(tk.Frame):
         self.update_progress()
 
         self.current_position = self.pick_next_position()
-        self.current_correct_name = question_name_at_position(self.current_position, tuning=self.tuning)
+        self.current_correct_name = question_name_at_position(
+            self.current_position,
+            tuning=self.tuning,
+            prefer_flats=self.prefer_flats,
+        )
 
         self.fretboard.highlight_position(self.current_position)
         self.answer_var.set("")
@@ -157,6 +164,7 @@ class PositionsQuizFrame(tk.Frame):
         max_fret: int = 12,
         tuning: list[int] = STANDARD_TUNING,
         tuning_name: str = "E Standard",
+        prefer_flats: bool = False,
         rng_seed: int | None = None,
         on_back=None,
     ) -> None:
@@ -168,6 +176,7 @@ class PositionsQuizFrame(tk.Frame):
         self.max_fret = max_fret
         self.tuning = tuning
         self.tuning_name = tuning_name
+        self.prefer_flats = prefer_flats
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
         self.on_back = on_back
@@ -183,7 +192,8 @@ class PositionsQuizFrame(tk.Frame):
         header = tk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
 
-        tk.Label(header, text=f"Mode B: Find all positions  |  {self.tuning_name}", font=("Arial", 13)).pack(side="left")
+        display = "Flats" if prefer_flats else "Sharps"
+        tk.Label(header, text=f"Mode B: Find all positions | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
         if self.on_back:
             tk.Button(header, text="Back to menu", command=self._back).pack(side="right")
 
@@ -233,7 +243,7 @@ class PositionsQuizFrame(tk.Frame):
         self.update_progress()
 
         self.target_note_index = self.rng.randint(0, 11)
-        self.target_note_name = index_to_name(self.target_note_index)
+        self.target_note_name = index_to_name(self.target_note_index, prefer_flats=self.prefer_flats)
 
         self.task.config(text=f"Click ALL positions for note {self.target_note_name} (up to fret {self.max_fret})")
 

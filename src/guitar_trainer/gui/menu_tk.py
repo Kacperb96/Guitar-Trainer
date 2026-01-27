@@ -11,7 +11,7 @@ class MenuFrame(tk.Frame):
         master: tk.Misc,
         *,
         stats_path: str,
-        on_start: callable,      # callback(mode, num_questions, max_fret, tuning_name, practice_minutes)
+        on_start: callable,      # callback(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats)
         on_heatmap: callable,    # callback(max_fret)
     ) -> None:
         super().__init__(master)
@@ -27,6 +27,9 @@ class MenuFrame(tk.Frame):
         self.max_fret_var = tk.StringVar(value="12")
         self.practice_minutes_var = tk.StringVar(value="10")
         self.tuning_var = tk.StringVar(value=DEFAULT_TUNING_NAME)
+
+        # New: display style
+        self.display_var = tk.StringVar(value="Sharps")  # or "Flats"
 
         title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
         title.pack(pady=(0, 10))
@@ -71,6 +74,12 @@ class MenuFrame(tk.Frame):
         options = list(TUNING_PRESETS.keys())
         tk.OptionMenu(row4, self.tuning_var, *options).pack(side="left", padx=8)
 
+        # New: display
+        row5 = tk.Frame(settings)
+        row5.pack(fill="x", padx=10, pady=4)
+        tk.Label(row5, text="Display notes as:").pack(side="left")
+        tk.OptionMenu(row5, self.display_var, "Sharps", "Flats").pack(side="left", padx=8)
+
         btns = tk.Frame(self)
         btns.pack(pady=10)
 
@@ -111,11 +120,14 @@ class MenuFrame(tk.Frame):
         if tuning_name not in TUNING_PRESETS:
             tuning_name = DEFAULT_TUNING_NAME
 
+        display = self.display_var.get().strip()
+        prefer_flats = (display.lower() == "flats")
+
         if mode not in {"A", "B", "ADAPT", "PRACTICE"}:
             messagebox.showerror("Invalid mode", "Mode must be A, B, ADAPT or PRACTICE.")
             return
 
-        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes)
+        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats)
 
     def _heatmap_clicked(self) -> None:
         try:

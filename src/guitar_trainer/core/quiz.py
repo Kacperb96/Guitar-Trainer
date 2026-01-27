@@ -19,19 +19,20 @@ def random_position(max_fret: int, rng: random.Random | None = None) -> Position
     return (string_index, fret)
 
 
-def question_name_at_position(position: Position, tuning: list[int] = STANDARD_TUNING) -> str:
+def question_name_at_position(
+    position: Position,
+    tuning: list[int] = STANDARD_TUNING,
+    *,
+    prefer_flats: bool = False,
+) -> str:
     string_index, fret = position
-    return index_to_name(note_index_at(string_index, fret, tuning))
+    idx = note_index_at(string_index, fret, tuning)
+    return index_to_name(idx, prefer_flats=prefer_flats)
 
 
 def check_note_name_answer(correct_name: str, user_answer: str) -> bool:
-    """
-    Accept enharmonic equivalents:
-      D# == Eb, G# == Ab, A# == Bb, etc.
-    """
     correct_idx = parse_note_name(correct_name)
     user_idx = parse_note_name(user_answer)
-
     if correct_idx is None or user_idx is None:
         return False
     return correct_idx == user_idx

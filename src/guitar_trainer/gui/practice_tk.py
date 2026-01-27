@@ -34,7 +34,7 @@ def _rank_weak_items(items: List[Tuple[str, int, float | None]], top_n: int = 3)
     - tie-breaker: fewer attempts first
     """
     def key_fn(it: Tuple[str, int, float | None]):
-        label, attempts, acc = it
+        _label, attempts, acc = it
         not_practiced = 0 if attempts == 0 else 1
         acc_val = acc if acc is not None else 0.0
         return (not_practiced, acc_val, attempts)
@@ -50,6 +50,7 @@ class PracticeSessionFrame(tk.Frame):
     - Optional filters:
         allowed_strings: core string_index set (0..5)
         allowed_frets: fret set (0..max_fret)
+    - prefer_flats: affects displayed correct note name (input accepts both anyway)
     - On finish calls: on_finish(PracticeSummary)
     """
 
@@ -63,6 +64,7 @@ class PracticeSessionFrame(tk.Frame):
         max_fret: int,
         tuning: list[int] = STANDARD_TUNING,
         tuning_name: str = "E Standard",
+        prefer_flats: bool = False,
         rng_seed: int | None = None,
         allowed_strings: Optional[Set[int]] = None,
         allowed_frets: Optional[Set[int]] = None,
@@ -82,6 +84,7 @@ class PracticeSessionFrame(tk.Frame):
         self.max_fret = max_fret
         self.tuning = tuning
         self.tuning_name = tuning_name
+        self.prefer_flats = prefer_flats
         self.on_back = on_back
         self.on_finish = on_finish
 
@@ -119,15 +122,15 @@ class PracticeSessionFrame(tk.Frame):
 
         subtitle = "Adaptive Notes"
         if self.allowed_strings is not None:
-            # show GUI string numbers (1..6)
-            gui_nums = sorted({6 - s for s in self.allowed_strings})
+            gui_nums = sorted({6 - s for s in self.allowed_strings})  # GUI: 1..6
             subtitle += f" | Strings {', '.join(map(str, gui_nums))}"
-        if self.allowed_frets is not None:
+        if self.allowed_frets is not None and self.allowed_frets:
             subtitle += f" | Frets {min(self.allowed_frets)}–{max(self.allowed_frets)}"
 
+        display = "Flats" if self.prefer_flats else "Sharps"
         tk.Label(
             header,
-            text=f"Practice Session ({minutes} min) | {subtitle} | {tuning_name}",
+            text=f"Practice Session ({minutes} min) | {subtitle} | {tuning_name} | {display}",
             font=("Arial", 13),
         ).pack(side="left")
 
@@ -220,14 +223,12 @@ class PracticeSessionFrame(tk.Frame):
 
     def pick_next_position(self) -> Position:
         """
-        We try adaptive positions until we hit filters.
+        Try adaptive positions until filters match.
         Fallback: uniform random among allowed positions if filters are too strict.
         """
-        # If no filters, just adaptive:
         if self.allowed_strings is None and self.allowed_frets is None:
             return choose_adaptive_position(self.stats, self.max_fret, self.rng)
 
-        # Try a bunch of times to satisfy filters:
         for _ in range(200):
             s, f = choose_adaptive_position(self.stats, self.max_fret, self.rng)
             if self.allowed_strings is not None and s not in self.allowed_strings:
@@ -236,7 +237,6 @@ class PracticeSessionFrame(tk.Frame):
                 continue
             return (s, f)
 
-        # Fallback: build allowed list and pick randomly
         candidates: list[Position] = []
         strings = self.allowed_strings if self.allowed_strings is not None else set(range(6))
         frets = self.allowed_frets if self.allowed_frets is not None else set(range(self.max_fret + 1))
@@ -257,7 +257,11 @@ class PracticeSessionFrame(tk.Frame):
             return
 
         self.current_position = self.pick_next_position()
-        self.current_correct_name = question_name_at_position(self.current_position, tuning=self.tuning)
+        self.current_correct_name = question_name_at_position(
+            self.current_position,
+            tuning=self.tuning,
+            prefer_flats=self.prefer_flats,
+        )
 
         self.fretboard.highlight_position(self.current_position)
         self.feedback.config(text="")
@@ -307,7 +311,7 @@ class PracticeSessionFrame(tk.Frame):
                 attempts_sum += a
                 correct_sum += c
 
-            gui_string_number = 6 - s  # s=5 -> 1, s=0 -> 6
+            gui_string_number = 6 - s  # core: s=5->GUI 1, s=0->GUI 6
             label = f"String {gui_string_number}"
             if attempts_sum == 0:
                 items.append((label, 0, None))

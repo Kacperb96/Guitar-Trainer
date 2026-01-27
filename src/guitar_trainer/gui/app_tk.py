@@ -46,6 +46,7 @@ def run_gui() -> None:
         max_fret: int,
         tuning_name: str,
         minutes: int,
+        prefer_flats: bool,
         allowed_strings: set[int] | None = None,
         allowed_frets: set[int] | None = None,
     ) -> None:
@@ -61,6 +62,7 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 tuning_name=tuning_name,
                 practice_minutes=minutes,
+                prefer_flats=prefer_flats,
             )
 
         frame = PracticeSessionFrame(
@@ -71,6 +73,7 @@ def run_gui() -> None:
             max_fret=max_fret,
             tuning=tuning,
             tuning_name=tuning_name,
+            prefer_flats=prefer_flats,
             allowed_strings=allowed_strings,
             allowed_frets=allowed_frets,
             on_back=show_menu,
@@ -86,51 +89,43 @@ def run_gui() -> None:
         max_fret: int,
         tuning_name: str,
         practice_minutes: int,
+        prefer_flats: bool,
     ) -> None:
         clear_root()
 
         def repeat() -> None:
-            start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes)
+            start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats)
 
         def train_weak_strings() -> None:
-            # summary labels are "String 1..6" (GUI). Convert to core indices.
-            # core: 0=low E ... 5=high e ; GUI string number: 1=high e ... 6=low E
             allowed = set()
-            for label, attempts, acc in summary.weak_strings:
+            for label, _attempts, _acc in summary.weak_strings:
                 parts = label.split()
                 if len(parts) == 2 and parts[0].lower() == "string":
-                    n = int(parts[1])  # 1..6
+                    n = int(parts[1])  # 1..6 (GUI)
                     core_idx = 6 - n   # 1->5, 6->0
                     allowed.add(core_idx)
-
-            if not allowed:
-                allowed = None
-
             start_practice_filtered(
                 max_fret=max_fret,
                 tuning_name=tuning_name,
                 minutes=practice_minutes,
-                allowed_strings=allowed,
+                prefer_flats=prefer_flats,
+                allowed_strings=allowed or None,
                 allowed_frets=None,
             )
 
         def train_weak_frets() -> None:
             allowed = set()
-            for label, attempts, acc in summary.weak_frets:
+            for label, _attempts, _acc in summary.weak_frets:
                 parts = label.split()
                 if len(parts) == 2 and parts[0].lower() == "fret":
-                    f = int(parts[1])
-                    allowed.add(f)
-
-            if not allowed:
-                allowed = None
-
+                    allowed.add(int(parts[1]))
             start_practice_filtered(
                 max_fret=max_fret,
                 tuning_name=tuning_name,
                 minutes=practice_minutes,
+                prefer_flats=prefer_flats,
                 allowed_strings=None,
-                allowed_frets=allowed,
+                allowed_frets=allowed or None,
             )
 
         frame = PracticeSummaryFrame(
@@ -144,7 +139,7 @@ def run_gui() -> None:
         )
         frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-    def start_mode(mode: str, num_questions: int, max_fret: int, tuning_name: str, practice_minutes: int) -> None:
+    def start_mode(mode: str, num_questions: int, max_fret: int, tuning_name: str, practice_minutes: int, prefer_flats: bool) -> None:
         clear_root()
         stats = load_stats(STATS_PATH)
         tuning = get_tuning_by_name(tuning_name)
@@ -158,6 +153,7 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 tuning=tuning,
                 tuning_name=tuning_name,
+                prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
         elif mode == "B":
@@ -169,6 +165,7 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 tuning=tuning,
                 tuning_name=tuning_name,
+                prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
         elif mode == "ADAPT":
@@ -180,6 +177,7 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 tuning=tuning,
                 tuning_name=tuning_name,
+                prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
         else:  # PRACTICE
@@ -191,6 +189,7 @@ def run_gui() -> None:
                     max_fret=max_fret,
                     tuning_name=tuning_name,
                     practice_minutes=practice_minutes,
+                    prefer_flats=prefer_flats,
                 )
 
             frame = PracticeSessionFrame(
@@ -201,6 +200,7 @@ def run_gui() -> None:
                 max_fret=max_fret,
                 tuning=tuning,
                 tuning_name=tuning_name,
+                prefer_flats=prefer_flats,
                 on_back=show_menu,
                 on_finish=on_finish,
             )
