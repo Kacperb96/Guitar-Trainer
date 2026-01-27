@@ -5,8 +5,8 @@
       "correct": 124
     },
     "B": {
-      "attempts": 4,
-      "correct": 2
+      "attempts": 6,
+      "correct": 3
     }
   },
   "by_note": {
@@ -43,7 +43,7 @@
       "correct": 12
     },
     "F": {
-      "attempts": 12,
+      "attempts": 13,
       "correct": 11
     },
     "F#": {
@@ -51,8 +51,8 @@
       "correct": 6
     },
     "G": {
-      "attempts": 7,
-      "correct": 7
+      "attempts": 8,
+      "correct": 8
     },
     "G#": {
       "attempts": 10,
@@ -335,6 +335,6 @@
       "correct": 17
     }
   },
-  "total_attempts": 139,
-  "total_correct": 126
+  "total_attempts": 141,
+  "total_correct": 127
 }

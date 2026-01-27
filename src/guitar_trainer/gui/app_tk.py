@@ -31,6 +31,26 @@ def run_gui() -> None:
 
     apply_theme(root)
 
+    # --- Fullscreen handling (robust on Linux) ---
+    def exit_fullscreen(event=None):
+        # Force-disable fullscreen no matter what
+        root.attributes("-fullscreen", False)
+        # Put window back to maximized state (nice UX)
+        try:
+            root.state("zoomed")
+        except tk.TclError:
+            pass
+        return "break"
+
+    def toggle_fullscreen(event=None):
+        cur = bool(root.attributes("-fullscreen"))
+        root.attributes("-fullscreen", not cur)
+        return "break"
+
+    # bind_all => works even when focus is in Entry/Canvas/etc.
+    root.bind_all("<Escape>", exit_fullscreen, add="+")
+    root.bind_all("<F11>", toggle_fullscreen, add="+")
+
     def clear_root() -> None:
         for child in root.winfo_children():
             child.destroy()
