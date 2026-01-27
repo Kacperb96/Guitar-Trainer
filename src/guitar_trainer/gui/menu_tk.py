@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 
+from guitar_trainer.gui.theme import BG
 from guitar_trainer.core.stats import Stats, load_stats, save_stats
 from guitar_trainer.core.tuning import (
     get_tuning_presets,
@@ -11,7 +13,7 @@ from guitar_trainer.core.tuning import (
 )
 
 
-class MenuFrame(tk.Frame):
+class MenuFrame(ttk.Frame):
     def __init__(
         self,
         master: tk.Misc,
@@ -27,6 +29,7 @@ class MenuFrame(tk.Frame):
         self.on_heatmap = on_heatmap
         self.stats = load_stats(self.stats_path)
 
+        # Vars
         self.mode_var = tk.StringVar(value="A")
         self.questions_var = tk.StringVar(value="10")
         self.max_fret_var = tk.StringVar(value="12")
@@ -34,86 +37,110 @@ class MenuFrame(tk.Frame):
 
         self.num_strings_var = tk.StringVar(value=str(DEFAULT_NUM_STRINGS))  # "6" or "7"
         self.tuning_var = tk.StringVar(value=get_default_tuning_name(DEFAULT_NUM_STRINGS))
-
         self.display_var = tk.StringVar(value="Sharps")  # or "Flats"
-
-        # custom tuning input
         self.custom_tuning_var = tk.StringVar(value="E A D G B E")
 
-        title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
-        title.pack(pady=(0, 10))
+        # Layout: two columns (left settings, right actions/info)
+        root = ttk.Frame(self)
+        root.pack(fill="both", expand=True)
 
-        mode_box = tk.LabelFrame(self, text="Mode")
-        mode_box.pack(fill="x", padx=10, pady=6)
+        left = ttk.Frame(root, style="Panel.TFrame")
+        left.pack(side="left", fill="y", padx=(0, 14))
+        left.configure(padding=16)
 
-        tk.Radiobutton(mode_box, text="Mode A: Guess the note", variable=self.mode_var, value="A").pack(anchor="w", padx=10, pady=2)
-        tk.Radiobutton(mode_box, text="Mode B: Find all positions", variable=self.mode_var, value="B").pack(anchor="w", padx=10, pady=2)
-        tk.Radiobutton(mode_box, text="Adaptive (Mode A): Focus weak positions", variable=self.mode_var, value="ADAPT").pack(anchor="w", padx=10, pady=2)
-        tk.Radiobutton(mode_box, text="Practice Session (timed, Adaptive Notes)", variable=self.mode_var, value="PRACTICE").pack(anchor="w", padx=10, pady=2)
+        right = ttk.Frame(root, style="Panel2.TFrame")
+        right.pack(side="left", fill="both", expand=True)
+        right.configure(padding=16)
 
-        settings = tk.LabelFrame(self, text="Settings")
-        settings.pack(fill="x", padx=10, pady=6)
+        # Title
+        ttk.Label(left, text="Guitar Trainer", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(left, text="Dark • Modern • Practice-focused", style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
 
-        # instrument
-        row0 = tk.Frame(settings)
-        row0.pack(fill="x", padx=10, pady=4)
-        tk.Label(row0, text="Instrument:").pack(side="left")
-        tk.OptionMenu(row0, self.num_strings_var, "6", "7").pack(side="left", padx=8)
+        # Mode box
+        mode_box = ttk.Labelframe(left, text="Mode")
+        mode_box.pack(fill="x", pady=(0, 12))
 
-        # tuning dropdown (dynamic)
-        row_t = tk.Frame(settings)
-        row_t.pack(fill="x", padx=10, pady=4)
-        tk.Label(row_t, text="Tuning:").pack(side="left")
-        self._tuning_option = tk.OptionMenu(row_t, self.tuning_var, "")
-        self._tuning_option.pack(side="left", padx=8)
+        ttk.Radiobutton(mode_box, text="Mode A — Guess the note", variable=self.mode_var, value="A").pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Mode B — Find all positions", variable=self.mode_var, value="B").pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Adaptive (Mode A)", variable=self.mode_var, value="ADAPT").pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Practice Session (timed)", variable=self.mode_var, value="PRACTICE").pack(anchor="w", pady=2)
 
-        # custom tuning entry
-        row_c = tk.Frame(settings)
-        row_c.pack(fill="x", padx=10, pady=4)
-        tk.Label(row_c, text="Custom tuning (lowest → highest):").pack(side="left")
-        self.custom_entry = tk.Entry(row_c, textvariable=self.custom_tuning_var, width=32)
-        self.custom_entry.pack(side="left", padx=8)
-        self.custom_hint = tk.Label(row_c, text="", fg="gray")
-        self.custom_hint.pack(side="left")
+        # Settings box
+        settings = ttk.Labelframe(left, text="Settings")
+        settings.pack(fill="x", pady=(0, 12))
 
-        # display
-        rowd = tk.Frame(settings)
-        rowd.pack(fill="x", padx=10, pady=4)
-        tk.Label(rowd, text="Display notes as:").pack(side="left")
-        tk.OptionMenu(rowd, self.display_var, "Sharps", "Flats").pack(side="left", padx=8)
+        def row(parent, label: str):
+            r = ttk.Frame(parent)
+            r.pack(fill="x", pady=6)
+            ttk.Label(r, text=label).pack(side="left")
+            return r
 
-        # questions
-        row1 = tk.Frame(settings)
-        row1.pack(fill="x", padx=10, pady=4)
-        tk.Label(row1, text="Number of questions (A/B/ADAPT):").pack(side="left")
-        tk.Entry(row1, textvariable=self.questions_var, width=8).pack(side="left", padx=8)
+        r0 = row(settings, "Instrument")
+        ttk.Combobox(r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly").pack(side="right")
 
-        # practice minutes
-        row2 = tk.Frame(settings)
-        row2.pack(fill="x", padx=10, pady=4)
-        tk.Label(row2, text="Practice minutes (PRACTICE):").pack(side="left")
-        tk.Entry(row2, textvariable=self.practice_minutes_var, width=8).pack(side="left", padx=8)
+        r1 = row(settings, "Tuning")
+        self.tuning_combo = ttk.Combobox(r1, textvariable=self.tuning_var, values=[], width=26, state="readonly")
+        self.tuning_combo.pack(side="right")
 
-        # max fret
-        row3 = tk.Frame(settings)
-        row3.pack(fill="x", padx=10, pady=4)
-        tk.Label(row3, text="Max fret (0–24):").pack(side="left")
-        tk.Entry(row3, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
+        r2 = row(settings, "Display")
+        ttk.Combobox(r2, textvariable=self.display_var, values=["Sharps", "Flats"], width=10, state="readonly").pack(side="right")
 
-        btns = tk.Frame(self)
-        btns.pack(pady=10)
-        tk.Button(btns, text="Start", width=12, command=self._start_clicked).pack(side="left", padx=6)
-        tk.Button(btns, text="Heatmap", width=12, command=self._heatmap_clicked).pack(side="left", padx=6)
-        tk.Button(btns, text="Show stats", width=12, command=self._show_stats).pack(side="left", padx=6)
-        tk.Button(btns, text="Reset stats", width=12, command=self._reset_stats).pack(side="left", padx=6)
-        tk.Button(btns, text="Quit", width=12, command=self._quit).pack(side="left", padx=6)
+        r3 = row(settings, "Questions")
+        ttk.Entry(r3, textvariable=self.questions_var, width=8).pack(side="right")
 
-        hint = tk.Label(self, text="Strings: 1 (top, highest) ... N (bottom, lowest).", fg="gray")
-        hint.pack(pady=(5, 0))
+        r4 = row(settings, "Practice (min)")
+        ttk.Entry(r4, textvariable=self.practice_minutes_var, width=8).pack(side="right")
 
-        # populate tuning menu initially + on instrument change
+        r5 = row(settings, "Max fret")
+        ttk.Entry(r5, textvariable=self.max_fret_var, width=8).pack(side="right")
+
+        # Custom tuning box (shows only when Custom... is selected)
+        custom_box = ttk.Labelframe(left, text="Custom tuning")
+        custom_box.pack(fill="x", pady=(0, 12))
+        ttk.Label(custom_box, text="Lowest → Highest", style="Muted.TLabel").pack(anchor="w")
+        self.custom_entry = ttk.Entry(custom_box, textvariable=self.custom_tuning_var)
+        self.custom_entry.pack(fill="x", pady=(6, 4))
+        self.custom_hint = ttk.Label(custom_box, text="", style="Muted.TLabel")
+        self.custom_hint.pack(anchor="w")
+
+        # Buttons on the right
+        ttk.Label(right, text="Quick actions", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(right, text="Start training or explore your stats.", style="Muted.TLabel").pack(anchor="w", pady=(2, 16))
+
+        btn_grid = ttk.Frame(right)
+        btn_grid.pack(fill="x")
+
+        start_btn = ttk.Button(btn_grid, text="▶ Start", style="Primary.TButton", command=self._start_clicked)
+        start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+
+        heat_btn = ttk.Button(btn_grid, text="🔥 Heatmap", command=self._heatmap_clicked)
+        heat_btn.grid(row=0, column=1, sticky="ew", pady=(0, 10))
+
+        stats_btn = ttk.Button(btn_grid, text="📊 Show stats", command=self._show_stats)
+        stats_btn.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+
+        reset_btn = ttk.Button(btn_grid, text="🧹 Reset stats", style="Danger.TButton", command=self._reset_stats)
+        reset_btn.grid(row=1, column=1, sticky="ew", pady=(0, 10))
+
+        quit_btn = ttk.Button(right, text="✖ Quit", command=self._quit)
+        quit_btn.pack(anchor="w", pady=(6, 0))
+
+        btn_grid.columnconfigure(0, weight=1)
+        btn_grid.columnconfigure(1, weight=1)
+
+        # Tip
+        tip = ttk.Label(
+            right,
+            text="Tip: Strings are numbered like on a diagram — 1 at top (thinnest), N at bottom (thickest).",
+            style="Muted.TLabel",
+            wraplength=520,
+        )
+        tip.pack(anchor="w", pady=(18, 0))
+
+        # bindings
         self.num_strings_var.trace_add("write", lambda *_: self._refresh_tuning_options())
         self.tuning_var.trace_add("write", lambda *_: self._refresh_custom_visibility())
+
         self._refresh_tuning_options()
         self._refresh_custom_visibility()
 
@@ -136,38 +163,30 @@ class MenuFrame(tk.Frame):
         presets = get_tuning_presets(n)
         options = list(presets.keys()) + [CUSTOM_TUNING_NAME]
 
-        menu = self._tuning_option["menu"]
-        menu.delete(0, "end")
-        for name in options:
-            menu.add_command(label=name, command=tk._setit(self.tuning_var, name))
+        self.tuning_combo["values"] = options
 
         cur = self.tuning_var.get()
         if cur not in options:
             self.tuning_var.set(get_default_tuning_name(n))
 
-        # update default custom text example
         if n == 7:
             self.custom_tuning_var.set("B E A D G B E")
+            self.custom_hint.config(text="Example: B E A D G B E  |  You can use Eb, D#, Ab, etc.")
         else:
             self.custom_tuning_var.set("E A D G B E")
+            self.custom_hint.config(text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.")
 
         self._refresh_custom_visibility()
 
     def _refresh_custom_visibility(self) -> None:
-        n = self._get_num_strings()
         is_custom = (self.tuning_var.get().strip() == CUSTOM_TUNING_NAME)
-
-        state = tk.NORMAL if is_custom else tk.DISABLED
-        self.custom_entry.config(state=state)
-        if n == 7:
-            self.custom_hint.config(text="e.g. B E A D G B E")
-        else:
-            self.custom_hint.config(text="e.g. E A D G B E")
+        state = "normal" if is_custom else "disabled"
+        self.custom_entry.configure(state=state)
 
     def _start_clicked(self) -> None:
         try:
             mode = self.mode_var.get().strip().upper()
-            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=200, field_name="Number of questions")
+            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=200, field_name="Questions")
             practice_minutes = self._parse_int(self.practice_minutes_var.get(), min_value=1, max_value=120, field_name="Practice minutes")
             max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
         except ValueError as e:
@@ -176,8 +195,7 @@ class MenuFrame(tk.Frame):
 
         num_strings = self._get_num_strings()
         tuning_name = self.tuning_var.get().strip()
-        display = self.display_var.get().strip()
-        prefer_flats = (display.lower() == "flats")
+        prefer_flats = (self.display_var.get().strip().lower() == "flats")
 
         custom_tuning = None
         if tuning_name == CUSTOM_TUNING_NAME:
