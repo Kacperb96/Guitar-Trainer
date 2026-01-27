@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from guitar_trainer.core.stats import Stats, load_stats, save_stats
+from guitar_trainer.core.tuning import TUNING_PRESETS, DEFAULT_TUNING_NAME
 
 
 class MenuFrame(tk.Frame):
@@ -16,14 +17,16 @@ class MenuFrame(tk.Frame):
         super().__init__(master)
 
         self.stats_path = stats_path
-        self.on_start = on_start        # callback(mode, num_questions, max_fret)
-        self.on_heatmap = on_heatmap    # callback(max_fret)
+        # callback(mode, num_questions, max_fret, tuning_name)
+        self.on_start = on_start
+        self.on_heatmap = on_heatmap
 
         self.stats = load_stats(self.stats_path)
 
         self.mode_var = tk.StringVar(value="A")
         self.questions_var = tk.StringVar(value="10")
         self.max_fret_var = tk.StringVar(value="12")
+        self.tuning_var = tk.StringVar(value=DEFAULT_TUNING_NAME)
 
         title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
         title.pack(pady=(0, 10))
@@ -54,6 +57,14 @@ class MenuFrame(tk.Frame):
         tk.Label(row2, text="Max fret (0–24):").pack(side="left")
         tk.Entry(row2, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
 
+        row3 = tk.Frame(settings)
+        row3.pack(fill="x", padx=10, pady=4)
+        tk.Label(row3, text="Tuning:").pack(side="left")
+
+        # dropdown
+        options = list(TUNING_PRESETS.keys())
+        tk.OptionMenu(row3, self.tuning_var, *options).pack(side="left", padx=8)
+
         btns = tk.Frame(self)
         btns.pack(pady=10)
 
@@ -65,7 +76,7 @@ class MenuFrame(tk.Frame):
 
         hint = tk.Label(
             self,
-            text="Strings: 1 (top, high e) ... 6 (bottom, low E). Heatmap/adaptive uses Mode A per-position stats.",
+            text="Strings: 1 (top, high e) ... 6 (bottom, low E).",
             fg="gray",
         )
         hint.pack(pady=(5, 0))
@@ -89,11 +100,15 @@ class MenuFrame(tk.Frame):
             messagebox.showerror("Invalid settings", str(e))
             return
 
+        tuning_name = self.tuning_var.get().strip()
+        if tuning_name not in TUNING_PRESETS:
+            tuning_name = DEFAULT_TUNING_NAME
+
         if mode not in {"A", "B", "ADAPT"}:
             messagebox.showerror("Invalid mode", "Mode must be A, B or ADAPT.")
             return
 
-        self.on_start(mode, num_questions, max_fret)
+        self.on_start(mode, num_questions, max_fret, tuning_name)
 
     def _heatmap_clicked(self) -> None:
         try:
@@ -101,7 +116,6 @@ class MenuFrame(tk.Frame):
         except ValueError as e:
             messagebox.showerror("Invalid settings", str(e))
             return
-
         self.on_heatmap(max_fret)
 
     def _show_stats(self) -> None:

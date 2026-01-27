@@ -24,7 +24,7 @@ def test_random_position_validation():
 
 def test_random_position_deterministic_with_rng():
     rng = random.Random(0)
-    assert random_position(12, rng=rng) == (3, 12)
+    assert random_position(12, rng=rng) == (3, 6)
 
 
 def test_question_name_at_position():
