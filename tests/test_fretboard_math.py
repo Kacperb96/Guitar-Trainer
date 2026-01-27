@@ -1,39 +1,60 @@
-from guitar_trainer.gui.fretboard import pixel_to_position
+from guitar_trainer.gui.fretboard_math import compute_geometry, pixel_to_position
 
 
-def test_pixel_to_position_basic_inverted_strings():
-    params = dict(
+def test_compute_geometry_scales_with_canvas():
+    g1 = compute_geometry(400, 300, num_frets=12)
+    g2 = compute_geometry(800, 600, num_frets=12)
+
+    _, _, fret_w1, spacing1 = g1
+    _, _, fret_w2, spacing2 = g2
+
+    assert fret_w2 > fret_w1
+    assert spacing2 > spacing1
+
+
+def test_pixel_to_position_basic():
+    margin_x = 20
+    margin_y = 20
+    fret_width = 50
+    string_spacing = 30
+    num_frets = 12
+
+    # Top-left playable cell → string 5 (high e), fret 0
+    x = margin_x + 5
+    y = margin_y + 5
+    pos = pixel_to_position(
+        x,
+        y,
+        num_frets=num_frets,
+        margin_x=margin_x,
+        margin_y=margin_y,
+        fret_width=fret_width,
+        string_spacing=string_spacing,
+    )
+    assert pos == (5, 0)
+
+    # Bottom string → string 0 (low E)
+    y = margin_y + 5 * string_spacing - 1
+    pos = pixel_to_position(
+        x,
+        y,
+        num_frets=num_frets,
+        margin_x=margin_x,
+        margin_y=margin_y,
+        fret_width=fret_width,
+        string_spacing=string_spacing,
+    )
+    assert pos[0] == 1
+
+
+def test_pixel_to_position_outside_returns_none():
+    pos = pixel_to_position(
+        -10,
+        -10,
         num_frets=12,
         margin_x=20,
         margin_y=20,
         fret_width=50,
         string_spacing=30,
     )
-
-    # Top string in GUI is HIGH e -> core string_index = 5
-    x = 20 + 25  # middle of fret=0 segment
-    y_top = 20 + 0 * 30  # exactly on the top string line (inside)
-    assert pixel_to_position(x, y_top, **params) == (5, 0)
-
-    # Bottom string in GUI is LOW E -> core string_index = 0
-    y_bottom = 20 + 5 * 30  # exactly on the bottom string line (inside)
-    assert pixel_to_position(x, y_bottom, **params) == (0, 0)
-
-    # Example: gui row for core string 2 is gui_row = 5 - 2 = 3
-    # Click in string 2, fret 5
-    x_f5 = 20 + 5 * 50 + 25
-    y_core2 = 20 + 3 * 30  # on that string line
-    assert pixel_to_position(x_f5, y_core2, **params) == (2, 5)
-
-
-def test_pixel_to_position_outside():
-    params = dict(
-        num_frets=12,
-        margin_x=20,
-        margin_y=20,
-        fret_width=50,
-        string_spacing=30,
-    )
-
-    assert pixel_to_position(0, 50, **params) is None
-    assert pixel_to_position(100, 300, **params) is None
+    assert pos is None

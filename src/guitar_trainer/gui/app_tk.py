@@ -12,6 +12,9 @@ def run_gui() -> None:
     root = tk.Tk()
     root.title("Guitar Trainer – GUI")
 
+    # Important: allow root to be resizable (it is by default, but keep explicit)
+    root.resizable(True, True)
+
     def clear_root() -> None:
         for child in root.winfo_children():
             child.destroy()
@@ -24,7 +27,8 @@ def run_gui() -> None:
             on_start=start_quiz,
             on_heatmap=show_heatmap,
         )
-        menu.pack(padx=12, pady=12)
+        # menu can stay non-expanding (it’s small UI), but expanding is also fine:
+        menu.pack(fill="both", expand=True, padx=12, pady=12)
 
     def start_quiz(mode: str, num_questions: int, max_fret: int) -> None:
         clear_root()
@@ -58,7 +62,8 @@ def run_gui() -> None:
                 on_back=show_menu,
             )
 
-        frame.pack(padx=12, pady=12)
+        # KEY FIX: let the screen fill the whole window and resize
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
 
     def show_heatmap(max_fret: int) -> None:
         clear_root()
@@ -69,7 +74,8 @@ def run_gui() -> None:
             max_fret=max_fret,
             on_back=show_menu,
         )
-        frame.pack(padx=12, pady=12)
+        # KEY FIX here too
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
 
     show_menu()
     root.mainloop()
