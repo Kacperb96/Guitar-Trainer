@@ -1,7 +1,7 @@
 import tkinter as tk
 
 from guitar_trainer.core.stats import load_stats
-from guitar_trainer.core.tuning import get_tuning_by_name
+from guitar_trainer.core.tuning import get_tuning_by_name, CUSTOM_TUNING_NAME
 from guitar_trainer.gui.menu_tk import MenuFrame
 from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame, AdaptiveNoteQuizFrame
 from guitar_trainer.gui.practice_tk import PracticeSessionFrame
@@ -12,9 +12,6 @@ STATS_PATH = "stats.json"
 
 
 def run_gui() -> None:
-    """
-    Public GUI entry-point (imported by guitar_trainer.app).
-    """
     root = tk.Tk()
     root.title("Guitar Trainer – GUI")
     root.resizable(True, True)
@@ -52,12 +49,12 @@ def run_gui() -> None:
         minutes: int,
         prefer_flats: bool,
         num_strings: int,
+        tuning: list[int],
         allowed_strings: set[int] | None = None,
         allowed_frets: set[int] | None = None,
     ) -> None:
         clear_root()
         stats = load_stats(STATS_PATH)
-        tuning = get_tuning_by_name(num_strings, tuning_name)
 
         def on_finish(summary: PracticeSummary) -> None:
             show_practice_summary(
@@ -69,6 +66,7 @@ def run_gui() -> None:
                 practice_minutes=minutes,
                 prefer_flats=prefer_flats,
                 num_strings=num_strings,
+                tuning=tuning,
             )
 
         frame = PracticeSessionFrame(
@@ -97,19 +95,20 @@ def run_gui() -> None:
         practice_minutes: int,
         prefer_flats: bool,
         num_strings: int,
+        tuning: list[int],
     ) -> None:
         clear_root()
 
         def repeat() -> None:
-            start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings)
+            start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, tuning)
 
         def train_weak_strings() -> None:
             allowed = set()
             for label, _attempts, _acc in summary.weak_strings:
                 parts = label.split()
                 if len(parts) == 2 and parts[0].lower() == "string":
-                    gui_n = int(parts[1])        # 1..N (GUI)
-                    core_idx = num_strings - gui_n  # GUI 1 -> core last
+                    gui_n = int(parts[1])          # 1..N
+                    core_idx = num_strings - gui_n
                     allowed.add(core_idx)
 
             start_practice_filtered(
@@ -118,6 +117,7 @@ def run_gui() -> None:
                 minutes=practice_minutes,
                 prefer_flats=prefer_flats,
                 num_strings=num_strings,
+                tuning=tuning,
                 allowed_strings=allowed or None,
                 allowed_frets=None,
             )
@@ -135,6 +135,7 @@ def run_gui() -> None:
                 minutes=practice_minutes,
                 prefer_flats=prefer_flats,
                 num_strings=num_strings,
+                tuning=tuning,
                 allowed_strings=None,
                 allowed_frets=allowed or None,
             )
@@ -158,10 +159,17 @@ def run_gui() -> None:
         practice_minutes: int,
         prefer_flats: bool,
         num_strings: int,
+        custom_tuning: list[int] | None = None,
     ) -> None:
         clear_root()
         stats = load_stats(STATS_PATH)
-        tuning = get_tuning_by_name(num_strings, tuning_name)
+
+        if custom_tuning is not None:
+            tuning = list(custom_tuning)
+            shown_name = "Custom"
+        else:
+            tuning = get_tuning_by_name(num_strings, tuning_name)
+            shown_name = tuning_name
 
         if mode == "A":
             frame = NoteQuizFrame(
@@ -171,7 +179,7 @@ def run_gui() -> None:
                 num_questions=num_questions,
                 max_fret=max_fret,
                 tuning=tuning,
-                tuning_name=tuning_name,
+                tuning_name=shown_name,
                 prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
@@ -183,7 +191,7 @@ def run_gui() -> None:
                 num_questions=num_questions,
                 max_fret=max_fret,
                 tuning=tuning,
-                tuning_name=tuning_name,
+                tuning_name=shown_name,
                 prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
@@ -195,7 +203,7 @@ def run_gui() -> None:
                 num_questions=num_questions,
                 max_fret=max_fret,
                 tuning=tuning,
-                tuning_name=tuning_name,
+                tuning_name=shown_name,
                 prefer_flats=prefer_flats,
                 on_back=show_menu,
             )
@@ -206,10 +214,11 @@ def run_gui() -> None:
                     mode=mode,
                     num_questions=num_questions,
                     max_fret=max_fret,
-                    tuning_name=tuning_name,
+                    tuning_name=shown_name,
                     practice_minutes=practice_minutes,
                     prefer_flats=prefer_flats,
                     num_strings=num_strings,
+                    tuning=tuning,
                 )
 
             frame = PracticeSessionFrame(
@@ -219,7 +228,7 @@ def run_gui() -> None:
                 minutes=practice_minutes,
                 max_fret=max_fret,
                 tuning=tuning,
-                tuning_name=tuning_name,
+                tuning_name=shown_name,
                 prefer_flats=prefer_flats,
                 on_back=show_menu,
                 on_finish=on_finish,

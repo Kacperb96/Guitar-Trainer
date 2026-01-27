@@ -6,6 +6,8 @@ from guitar_trainer.core.tuning import (
     get_tuning_presets,
     get_default_tuning_name,
     DEFAULT_NUM_STRINGS,
+    CUSTOM_TUNING_NAME,
+    parse_custom_tuning_text,
 )
 
 
@@ -15,7 +17,7 @@ class MenuFrame(tk.Frame):
         master: tk.Misc,
         *,
         stats_path: str,
-        on_start: callable,   # callback(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings)
+        on_start: callable,   # callback(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, custom_tuning)
         on_heatmap: callable, # callback(max_fret, num_strings)
     ) -> None:
         super().__init__(master)
@@ -35,6 +37,9 @@ class MenuFrame(tk.Frame):
 
         self.display_var = tk.StringVar(value="Sharps")  # or "Flats"
 
+        # custom tuning input
+        self.custom_tuning_var = tk.StringVar(value="E A D G B E")
+
         title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
         title.pack(pady=(0, 10))
 
@@ -52,9 +57,8 @@ class MenuFrame(tk.Frame):
         # instrument
         row0 = tk.Frame(settings)
         row0.pack(fill="x", padx=10, pady=4)
-        tk.Label(row0, text="String number:").pack(side="left")
-        instrument_menu = tk.OptionMenu(row0, self.num_strings_var, "6", "7")
-        instrument_menu.pack(side="left", padx=8)
+        tk.Label(row0, text="Instrument:").pack(side="left")
+        tk.OptionMenu(row0, self.num_strings_var, "6", "7").pack(side="left", padx=8)
 
         # tuning dropdown (dynamic)
         row_t = tk.Frame(settings)
@@ -62,6 +66,15 @@ class MenuFrame(tk.Frame):
         tk.Label(row_t, text="Tuning:").pack(side="left")
         self._tuning_option = tk.OptionMenu(row_t, self.tuning_var, "")
         self._tuning_option.pack(side="left", padx=8)
+
+        # custom tuning entry
+        row_c = tk.Frame(settings)
+        row_c.pack(fill="x", padx=10, pady=4)
+        tk.Label(row_c, text="Custom tuning (lowest → highest):").pack(side="left")
+        self.custom_entry = tk.Entry(row_c, textvariable=self.custom_tuning_var, width=32)
+        self.custom_entry.pack(side="left", padx=8)
+        self.custom_hint = tk.Label(row_c, text="", fg="gray")
+        self.custom_hint.pack(side="left")
 
         # display
         rowd = tk.Frame(settings)
@@ -100,7 +113,9 @@ class MenuFrame(tk.Frame):
 
         # populate tuning menu initially + on instrument change
         self.num_strings_var.trace_add("write", lambda *_: self._refresh_tuning_options())
+        self.tuning_var.trace_add("write", lambda *_: self._refresh_custom_visibility())
         self._refresh_tuning_options()
+        self._refresh_custom_visibility()
 
     def _parse_int(self, value: str, *, min_value: int, max_value: int, field_name: str) -> int:
         value = value.strip()
@@ -119,17 +134,35 @@ class MenuFrame(tk.Frame):
     def _refresh_tuning_options(self) -> None:
         n = self._get_num_strings()
         presets = get_tuning_presets(n)
-        options = list(presets.keys())
+        options = list(presets.keys()) + [CUSTOM_TUNING_NAME]
 
         menu = self._tuning_option["menu"]
         menu.delete(0, "end")
         for name in options:
             menu.add_command(label=name, command=tk._setit(self.tuning_var, name))
 
-        # if current tuning doesn't exist, set default
         cur = self.tuning_var.get()
-        if cur not in presets:
+        if cur not in options:
             self.tuning_var.set(get_default_tuning_name(n))
+
+        # update default custom text example
+        if n == 7:
+            self.custom_tuning_var.set("B E A D G B E")
+        else:
+            self.custom_tuning_var.set("E A D G B E")
+
+        self._refresh_custom_visibility()
+
+    def _refresh_custom_visibility(self) -> None:
+        n = self._get_num_strings()
+        is_custom = (self.tuning_var.get().strip() == CUSTOM_TUNING_NAME)
+
+        state = tk.NORMAL if is_custom else tk.DISABLED
+        self.custom_entry.config(state=state)
+        if n == 7:
+            self.custom_hint.config(text="e.g. B E A D G B E")
+        else:
+            self.custom_hint.config(text="e.g. E A D G B E")
 
     def _start_clicked(self) -> None:
         try:
@@ -146,11 +179,19 @@ class MenuFrame(tk.Frame):
         display = self.display_var.get().strip()
         prefer_flats = (display.lower() == "flats")
 
+        custom_tuning = None
+        if tuning_name == CUSTOM_TUNING_NAME:
+            try:
+                custom_tuning = parse_custom_tuning_text(self.custom_tuning_var.get(), num_strings=num_strings)
+            except ValueError as e:
+                messagebox.showerror("Invalid custom tuning", str(e))
+                return
+
         if mode not in {"A", "B", "ADAPT", "PRACTICE"}:
             messagebox.showerror("Invalid mode", "Mode must be A, B, ADAPT or PRACTICE.")
             return
 
-        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings)
+        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, custom_tuning)
 
     def _heatmap_clicked(self) -> None:
         try:
