@@ -14,6 +14,17 @@ STATS_PATH = "stats.json"
 
 def run_gui() -> None:
     root = tk.Tk()
+
+    # Start maximized (full window, not borderless fullscreen)
+    try:
+        root.state("zoomed")  # works well on Ubuntu/Windows
+    except tk.TclError:
+        # Fallback for some Tk builds (e.g., certain macOS/older Tk)
+        root.update_idletasks()
+        w = root.winfo_screenwidth()
+        h = root.winfo_screenheight()
+        root.geometry(f"{w}x{h}+0+0")
+
     root.title("Guitar Trainer")
     root.minsize(900, 600)
     root.resizable(True, True)
