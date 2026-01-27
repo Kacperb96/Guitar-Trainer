@@ -11,13 +11,12 @@ class MenuFrame(tk.Frame):
         master: tk.Misc,
         *,
         stats_path: str,
-        on_start: callable,
-        on_heatmap: callable,
+        on_start: callable,      # callback(mode, num_questions, max_fret, tuning_name, practice_minutes)
+        on_heatmap: callable,    # callback(max_fret)
     ) -> None:
         super().__init__(master)
 
         self.stats_path = stats_path
-        # callback(mode, num_questions, max_fret, tuning_name)
         self.on_start = on_start
         self.on_heatmap = on_heatmap
 
@@ -26,6 +25,7 @@ class MenuFrame(tk.Frame):
         self.mode_var = tk.StringVar(value="A")
         self.questions_var = tk.StringVar(value="10")
         self.max_fret_var = tk.StringVar(value="12")
+        self.practice_minutes_var = tk.StringVar(value="10")
         self.tuning_var = tk.StringVar(value=DEFAULT_TUNING_NAME)
 
         title = tk.Label(self, text="Guitar Trainer – Start Menu", font=("Arial", 14))
@@ -43,27 +43,33 @@ class MenuFrame(tk.Frame):
         tk.Radiobutton(mode_box, text="Adaptive (Mode A): Focus weak positions", variable=self.mode_var, value="ADAPT").pack(
             anchor="w", padx=10, pady=2
         )
+        tk.Radiobutton(mode_box, text="Practice Session (timed, Adaptive Notes)", variable=self.mode_var, value="PRACTICE").pack(
+            anchor="w", padx=10, pady=2
+        )
 
         settings = tk.LabelFrame(self, text="Settings")
         settings.pack(fill="x", padx=10, pady=6)
 
         row1 = tk.Frame(settings)
         row1.pack(fill="x", padx=10, pady=4)
-        tk.Label(row1, text="Number of questions:").pack(side="left")
+        tk.Label(row1, text="Number of questions (A/B/ADAPT):").pack(side="left")
         tk.Entry(row1, textvariable=self.questions_var, width=8).pack(side="left", padx=8)
 
         row2 = tk.Frame(settings)
         row2.pack(fill="x", padx=10, pady=4)
-        tk.Label(row2, text="Max fret (0–24):").pack(side="left")
-        tk.Entry(row2, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
+        tk.Label(row2, text="Practice minutes (PRACTICE):").pack(side="left")
+        tk.Entry(row2, textvariable=self.practice_minutes_var, width=8).pack(side="left", padx=8)
 
         row3 = tk.Frame(settings)
         row3.pack(fill="x", padx=10, pady=4)
-        tk.Label(row3, text="Tuning:").pack(side="left")
+        tk.Label(row3, text="Max fret (0–24):").pack(side="left")
+        tk.Entry(row3, textvariable=self.max_fret_var, width=8).pack(side="left", padx=8)
 
-        # dropdown
+        row4 = tk.Frame(settings)
+        row4.pack(fill="x", padx=10, pady=4)
+        tk.Label(row4, text="Tuning:").pack(side="left")
         options = list(TUNING_PRESETS.keys())
-        tk.OptionMenu(row3, self.tuning_var, *options).pack(side="left", padx=8)
+        tk.OptionMenu(row4, self.tuning_var, *options).pack(side="left", padx=8)
 
         btns = tk.Frame(self)
         btns.pack(pady=10)
@@ -94,7 +100,8 @@ class MenuFrame(tk.Frame):
     def _start_clicked(self) -> None:
         try:
             mode = self.mode_var.get().strip().upper()
-            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=100, field_name="Number of questions")
+            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=200, field_name="Number of questions")
+            practice_minutes = self._parse_int(self.practice_minutes_var.get(), min_value=1, max_value=120, field_name="Practice minutes")
             max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
         except ValueError as e:
             messagebox.showerror("Invalid settings", str(e))
@@ -104,11 +111,11 @@ class MenuFrame(tk.Frame):
         if tuning_name not in TUNING_PRESETS:
             tuning_name = DEFAULT_TUNING_NAME
 
-        if mode not in {"A", "B", "ADAPT"}:
-            messagebox.showerror("Invalid mode", "Mode must be A, B or ADAPT.")
+        if mode not in {"A", "B", "ADAPT", "PRACTICE"}:
+            messagebox.showerror("Invalid mode", "Mode must be A, B, ADAPT or PRACTICE.")
             return
 
-        self.on_start(mode, num_questions, max_fret, tuning_name)
+        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes)
 
     def _heatmap_clicked(self) -> None:
         try:
