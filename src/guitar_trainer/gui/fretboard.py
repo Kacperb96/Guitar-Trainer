@@ -30,6 +30,7 @@ class Fretboard(tk.Frame):
 
         self._last_size: tuple[int, int] | None = None
 
+        # redraw state
         self._single_highlight: Position | None = None
         self._cell_markers: dict[Position, str] = {}
         self._heatmap: dict[Position, str] = {}
@@ -105,6 +106,46 @@ class Fretboard(tk.Frame):
         bottom = top + 5 * self.string_spacing
         return left, right, top, bottom
 
+    def _draw_fret_dots(self) -> None:
+        """
+        Draw classic fretboard position markers:
+        single dots: 3,5,7,9,15,17,19,21
+        double dots: 12,24
+        """
+        left, _right, top, bottom = self._board_bounds()
+
+        # Typical marker frets
+        single = {3, 5, 7, 9, 15, 17, 19, 21}
+        double = {12, 24}
+
+        # radius scales with geometry
+        r = max(4, min(self.fret_width, self.string_spacing) // 6)
+
+        # y positions (between string lines):
+        # single dot centered between the middle strings
+        y_single = top + int(2.5 * self.string_spacing)
+
+        # double dots a bit above/below center (between gaps)
+        y_double_a = top + int(1.5 * self.string_spacing)
+        y_double_b = top + int(3.5 * self.string_spacing)
+
+        for fret in range(0, self.num_frets + 1):
+            if fret in single or fret in double:
+                # dot is usually in the middle of the fret "cell"
+                x = left + fret * self.fret_width + self.fret_width // 2
+
+                if fret in double:
+                    for y in (y_double_a, y_double_b):
+                        self.canvas.create_oval(
+                            x - r, y - r, x + r, y + r,
+                            fill="gray", outline=""
+                        )
+                else:
+                    self.canvas.create_oval(
+                        x - r, y_single - r, x + r, y_single + r,
+                        fill="gray", outline=""
+                    )
+
     def _draw_base(self) -> None:
         left, right, top, bottom = self._board_bounds()
 
@@ -127,6 +168,9 @@ class Fretboard(tk.Frame):
         nut_x = left + self.fret_width
         self.canvas.create_line(nut_x, top, nut_x, bottom, width=4)
 
+        # position marker dots (draw BEFORE strings so strings look "on top")
+        self._draw_fret_dots()
+
         # strings + string numbers (1 at top)
         for gui_row in range(6):
             y = top + gui_row * self.string_spacing
@@ -147,31 +191,47 @@ class Fretboard(tk.Frame):
         return x, y
 
     def _draw_heatmap(self) -> None:
+        # heatmap rectangles behind strings/frets: draw them first-ish, but after base is ok;
+        # they will still sit "under" markers because markers are drawn last.
+        left, _, top, bottom = self._board_bounds()
+
         for (s, f), fill in self._heatmap.items():
-            if f > self.num_frets:
+            if f < 0 or f > self.num_frets:
                 continue
-            left, _, top, bottom = self._board_bounds()
+            if s < 0 or s > 5:
+                continue
+
             gui_row = 5 - s
             x0 = left + f * self.fret_width
             x1 = x0 + self.fret_width
-            y = top + gui_row * self.string_spacing
-            h = self.string_spacing // 2
+            y_center = top + gui_row * self.string_spacing
+            half = self.string_spacing // 2
+
             self.canvas.create_rectangle(
-                x0, max(top, y - h), x1, min(bottom, y + h),
-                fill=fill, outline=""
+                x0,
+                max(top, y_center - half),
+                x1,
+                min(bottom, y_center + half),
+                fill=fill,
+                outline="",
             )
 
     def _draw_markers(self) -> None:
+        # many markers (Mode B)
         for (s, f), outline in self._cell_markers.items():
-            if f > self.num_frets:
+            if f < 0 or f > self.num_frets:
                 continue
+            if s < 0 or s > 5:
+                continue
+
             cx, cy = self._position_center(s, f)
             r = max(5, self.string_spacing // 5)
             self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline=outline, width=2)
 
+        # single highlight (Mode A)
         if self._single_highlight:
             s, f = self._single_highlight
-            if f <= self.num_frets:
+            if 0 <= s <= 5 and 0 <= f <= self.num_frets:
                 cx, cy = self._position_center(s, f)
                 r = max(6, self.string_spacing // 4)
                 self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="black", width=2)
