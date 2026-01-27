@@ -1,23 +1,23 @@
+from __future__ import annotations
+
 import random
 import time
 import tkinter as tk
 
 from guitar_trainer.core.adaptive import choose_adaptive_position
-from guitar_trainer.core.quiz import (
-    question_name_at_position,
-    check_note_name_answer,
-)
+from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
 from guitar_trainer.core.stats import Stats, save_stats
 from guitar_trainer.core.tuning import STANDARD_TUNING
 from guitar_trainer.gui.fretboard import Fretboard, Position
+from guitar_trainer.gui.practice_summary_tk import PracticeSummary
 
 
 class PracticeSessionFrame(tk.Frame):
     """
-    Timed practice session:
-    - Uses adaptive position selection (like Adaptive Mode A)
-    - Records stats.by_position (so heatmap/adaptive improve)
-    - Tracks session summary (correct, total, avg response time)
+    Timed practice session (adaptive notes):
+    - Records stats.by_position
+    - Tracks session totals + avg response time
+    - On finish calls: on_finish(PracticeSummary)
     """
 
     def __init__(
@@ -32,7 +32,7 @@ class PracticeSessionFrame(tk.Frame):
         tuning_name: str = "E Standard",
         rng_seed: int | None = None,
         on_back=None,
-        on_show_heatmap=None,  # callback(max_fret)
+        on_finish=None,  # callback(summary: PracticeSummary)
     ) -> None:
         super().__init__(master)
 
@@ -48,7 +48,7 @@ class PracticeSessionFrame(tk.Frame):
         self.tuning = tuning
         self.tuning_name = tuning_name
         self.on_back = on_back
-        self.on_show_heatmap = on_show_heatmap
+        self.on_finish = on_finish
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
 
@@ -177,7 +177,6 @@ class PracticeSessionFrame(tk.Frame):
         self.feedback.config(text="")
         self.answer_var.set("")
         self.answer_entry.focus_set()
-
         self.question_start_time = time.monotonic()
 
     def submit_answer(self) -> None:
@@ -187,7 +186,6 @@ class PracticeSessionFrame(tk.Frame):
             self.finish()
             return
 
-        # time spent on this question
         dt = time.monotonic() - self.question_start_time
         self.total_time_sec += dt
 
@@ -206,17 +204,12 @@ class PracticeSessionFrame(tk.Frame):
             fret=f,
         )
 
-        if is_correct:
-            self.feedback.config(text="✅ Correct")
-        else:
-            self.feedback.config(text=f"❌ Wrong. Correct: {self.current_correct_name}")
-
+        self.feedback.config(text="✅ Correct" if is_correct else f"❌ Wrong. Correct: {self.current_correct_name}")
         self._update_ui_labels()
 
-        # move on quickly
         self.after(450, self.next_question)
 
-    # ---------- finish / summary ----------
+    # ---------- finish ----------
 
     def finish(self) -> None:
         self._stop_timer()
@@ -228,17 +221,28 @@ class PracticeSessionFrame(tk.Frame):
         self.submit_btn.config(state=tk.DISABLED)
         self.answer_entry.config(state=tk.DISABLED)
 
-        avg_time = (self.total_time_sec / self.total) if self.total > 0 else 0.0
-        acc = (self.correct / self.total * 100.0) if self.total > 0 else 0.0
+        answered = self.total
+        correct = self.correct
+        avg_time = (self.total_time_sec / answered) if answered > 0 else 0.0
+        acc = (correct / answered * 100.0) if answered > 0 else 0.0
 
-        self.feedback.config(
-            text=(
-                f"Session finished. "
-                f"Answered: {self.total}, Correct: {self.correct} ({acc:.1f}%), "
-                f"Avg time: {avg_time:.2f}s"
-            )
+        summary = PracticeSummary(
+            minutes=self.minutes,
+            max_fret=self.max_fret,
+            tuning_name=self.tuning_name,
+            answered=answered,
+            correct=correct,
+            accuracy_percent=acc,
+            avg_time_sec=avg_time,
         )
 
-        # After a short delay, show heatmap automatically (if callback provided)
-        if self.on_show_heatmap is not None:
-            self.after(1000, lambda: self.on_show_heatmap(self.max_fret))
+        if self.on_finish is not None:
+            self.on_finish(summary)
+        else:
+            # fallback: show text if no summary screen wired
+            self.feedback.config(
+                text=(
+                    f"Session finished. Answered: {answered}, Correct: {correct} ({acc:.1f}%), "
+                    f"Avg time: {avg_time:.2f}s"
+                )
+            )

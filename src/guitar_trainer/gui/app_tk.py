@@ -5,6 +5,7 @@ from guitar_trainer.core.tuning import get_tuning_by_name
 from guitar_trainer.gui.menu_tk import MenuFrame
 from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame, AdaptiveNoteQuizFrame
 from guitar_trainer.gui.practice_tk import PracticeSessionFrame
+from guitar_trainer.gui.practice_summary_tk import PracticeSummaryFrame, PracticeSummary
 from guitar_trainer.gui.stats_view_tk import StatsHeatmapFrame
 
 STATS_PATH = "stats.json"
@@ -36,6 +37,29 @@ def run_gui() -> None:
             root,
             stats=stats,
             max_fret=max_fret,
+            on_back=show_menu,
+        )
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+    def show_practice_summary(
+        summary: PracticeSummary,
+        *,
+        mode: str,
+        num_questions: int,
+        max_fret: int,
+        tuning_name: str,
+        practice_minutes: int,
+    ) -> None:
+        clear_root()
+
+        def repeat() -> None:
+            start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes)
+
+        frame = PracticeSummaryFrame(
+            root,
+            summary=summary,
+            on_show_heatmap=show_heatmap,
+            on_repeat=repeat,
             on_back=show_menu,
         )
         frame.pack(fill="both", expand=True, padx=12, pady=12)
@@ -79,6 +103,16 @@ def run_gui() -> None:
                 on_back=show_menu,
             )
         else:  # PRACTICE
+            def on_finish(summary: PracticeSummary) -> None:
+                show_practice_summary(
+                    summary,
+                    mode=mode,
+                    num_questions=num_questions,
+                    max_fret=max_fret,
+                    tuning_name=tuning_name,
+                    practice_minutes=practice_minutes,
+                )
+
             frame = PracticeSessionFrame(
                 root,
                 stats=stats,
@@ -88,7 +122,7 @@ def run_gui() -> None:
                 tuning=tuning,
                 tuning_name=tuning_name,
                 on_back=show_menu,
-                on_show_heatmap=show_heatmap,  # auto-open heatmap after finish
+                on_finish=on_finish,
             )
 
         frame.pack(fill="both", expand=True, padx=12, pady=12)
