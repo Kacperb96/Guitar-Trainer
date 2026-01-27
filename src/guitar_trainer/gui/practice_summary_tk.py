@@ -27,9 +27,11 @@ class PracticeSummaryFrame(tk.Frame):
         master: tk.Misc,
         *,
         summary: PracticeSummary,
-        on_show_heatmap: callable | None = None,  # callback(max_fret)
-        on_repeat: callable | None = None,        # callback()
-        on_back: callable | None = None,          # callback()
+        on_show_heatmap: callable | None = None,      # callback(max_fret)
+        on_train_weak_strings: callable | None = None,  # callback()
+        on_train_weak_frets: callable | None = None,    # callback()
+        on_repeat: callable | None = None,            # callback()
+        on_back: callable | None = None,              # callback()
     ) -> None:
         super().__init__(master)
 
@@ -96,15 +98,31 @@ class PracticeSummaryFrame(tk.Frame):
         tk.Button(
             actions,
             text="Show heatmap",
-            width=14,
+            width=16,
             command=(lambda: on_show_heatmap(summary.max_fret)) if on_show_heatmap else None,
             state=tk.NORMAL if on_show_heatmap else tk.DISABLED,
         ).pack(side="left", padx=6)
 
         tk.Button(
             actions,
+            text="Train weak strings",
+            width=16,
+            command=on_train_weak_strings if on_train_weak_strings else None,
+            state=tk.NORMAL if on_train_weak_strings else tk.DISABLED,
+        ).pack(side="left", padx=6)
+
+        tk.Button(
+            actions,
+            text="Train weak frets",
+            width=16,
+            command=on_train_weak_frets if on_train_weak_frets else None,
+            state=tk.NORMAL if on_train_weak_frets else tk.DISABLED,
+        ).pack(side="left", padx=6)
+
+        tk.Button(
+            actions,
             text="Repeat session",
-            width=14,
+            width=16,
             command=on_repeat if on_repeat else None,
             state=tk.NORMAL if on_repeat else tk.DISABLED,
         ).pack(side="left", padx=6)
@@ -112,7 +130,7 @@ class PracticeSummaryFrame(tk.Frame):
         tk.Button(
             actions,
             text="Back to menu",
-            width=14,
+            width=16,
             command=on_back if on_back else None,
             state=tk.NORMAL if on_back else tk.DISABLED,
         ).pack(side="left", padx=6)

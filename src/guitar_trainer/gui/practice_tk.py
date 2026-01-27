@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import time
 import tkinter as tk
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Set
 
 from guitar_trainer.core.adaptive import choose_adaptive_position
 from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
@@ -37,7 +37,6 @@ def _rank_weak_items(items: List[Tuple[str, int, float | None]], top_n: int = 3)
         label, attempts, acc = it
         not_practiced = 0 if attempts == 0 else 1
         acc_val = acc if acc is not None else 0.0
-        # attempts==0 should be first, so not_practiced=0 first
         return (not_practiced, acc_val, attempts)
 
     return sorted(items, key=key_fn)[:top_n]
@@ -48,6 +47,9 @@ class PracticeSessionFrame(tk.Frame):
     Timed practice session (adaptive notes):
     - Records stats.by_position
     - Tracks session totals + avg response time
+    - Optional filters:
+        allowed_strings: core string_index set (0..5)
+        allowed_frets: fret set (0..max_fret)
     - On finish calls: on_finish(PracticeSummary)
     """
 
@@ -62,6 +64,8 @@ class PracticeSessionFrame(tk.Frame):
         tuning: list[int] = STANDARD_TUNING,
         tuning_name: str = "E Standard",
         rng_seed: int | None = None,
+        allowed_strings: Optional[Set[int]] = None,
+        allowed_frets: Optional[Set[int]] = None,
         on_back=None,
         on_finish=None,  # callback(summary: PracticeSummary)
     ) -> None:
@@ -80,6 +84,19 @@ class PracticeSessionFrame(tk.Frame):
         self.tuning_name = tuning_name
         self.on_back = on_back
         self.on_finish = on_finish
+
+        self.allowed_strings = set(allowed_strings) if allowed_strings is not None else None
+        self.allowed_frets = set(allowed_frets) if allowed_frets is not None else None
+
+        # sanitize filters
+        if self.allowed_strings is not None:
+            self.allowed_strings = {s for s in self.allowed_strings if 0 <= s <= 5}
+            if not self.allowed_strings:
+                self.allowed_strings = None
+        if self.allowed_frets is not None:
+            self.allowed_frets = {f for f in self.allowed_frets if 0 <= f <= max_fret}
+            if not self.allowed_frets:
+                self.allowed_frets = None
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
 
@@ -100,9 +117,17 @@ class PracticeSessionFrame(tk.Frame):
         header = tk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
 
+        subtitle = "Adaptive Notes"
+        if self.allowed_strings is not None:
+            # show GUI string numbers (1..6)
+            gui_nums = sorted({6 - s for s in self.allowed_strings})
+            subtitle += f" | Strings {', '.join(map(str, gui_nums))}"
+        if self.allowed_frets is not None:
+            subtitle += f" | Frets {min(self.allowed_frets)}–{max(self.allowed_frets)}"
+
         tk.Label(
             header,
-            text=f"Practice Session ({minutes} min) | Adaptive Notes | {tuning_name}",
+            text=f"Practice Session ({minutes} min) | {subtitle} | {tuning_name}",
             font=("Arial", 13),
         ).pack(side="left")
 
@@ -191,10 +216,40 @@ class PracticeSessionFrame(tk.Frame):
         self.time_left_label.config(text=f"Time left: {self._format_time(remaining)}")
         self.score_label.config(text=f"Correct: {self.correct}/{self.total}")
 
-    # ---------- session flow ----------
+    # ---------- adaptive pick with filters ----------
 
     def pick_next_position(self) -> Position:
-        return choose_adaptive_position(self.stats, self.max_fret, self.rng)
+        """
+        We try adaptive positions until we hit filters.
+        Fallback: uniform random among allowed positions if filters are too strict.
+        """
+        # If no filters, just adaptive:
+        if self.allowed_strings is None and self.allowed_frets is None:
+            return choose_adaptive_position(self.stats, self.max_fret, self.rng)
+
+        # Try a bunch of times to satisfy filters:
+        for _ in range(200):
+            s, f = choose_adaptive_position(self.stats, self.max_fret, self.rng)
+            if self.allowed_strings is not None and s not in self.allowed_strings:
+                continue
+            if self.allowed_frets is not None and f not in self.allowed_frets:
+                continue
+            return (s, f)
+
+        # Fallback: build allowed list and pick randomly
+        candidates: list[Position] = []
+        strings = self.allowed_strings if self.allowed_strings is not None else set(range(6))
+        frets = self.allowed_frets if self.allowed_frets is not None else set(range(self.max_fret + 1))
+        for s in strings:
+            for f in frets:
+                candidates.append((s, f))
+
+        if not candidates:
+            return choose_adaptive_position(self.stats, self.max_fret, self.rng)
+
+        return self.rng.choice(candidates)
+
+    # ---------- session flow ----------
 
     def next_question(self) -> None:
         if time.monotonic() >= self.end_time:
@@ -240,11 +295,10 @@ class PracticeSessionFrame(tk.Frame):
 
         self.after(450, self.next_question)
 
-    # ---------- weak areas computation ----------
+    # ---------- weak areas computation (from saved stats) ----------
 
     def _compute_weak_strings(self) -> List[Tuple[str, int, float | None]]:
         items: List[Tuple[str, int, float | None]] = []
-        # core string_index: 5 is high e (GUI string 1)
         for s in range(6):
             attempts_sum = 0
             correct_sum = 0
@@ -290,7 +344,6 @@ class PracticeSessionFrame(tk.Frame):
 
         save_stats(self.stats_path, self.stats)
 
-        # disable inputs
         self.submit_btn.config(state=tk.DISABLED)
         self.answer_entry.config(state=tk.DISABLED)
 

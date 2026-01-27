@@ -41,6 +41,43 @@ def run_gui() -> None:
         )
         frame.pack(fill="both", expand=True, padx=12, pady=12)
 
+    def start_practice_filtered(
+        *,
+        max_fret: int,
+        tuning_name: str,
+        minutes: int,
+        allowed_strings: set[int] | None = None,
+        allowed_frets: set[int] | None = None,
+    ) -> None:
+        clear_root()
+        stats = load_stats(STATS_PATH)
+        tuning = get_tuning_by_name(tuning_name)
+
+        def on_finish(summary: PracticeSummary) -> None:
+            show_practice_summary(
+                summary,
+                mode="PRACTICE",
+                num_questions=0,
+                max_fret=max_fret,
+                tuning_name=tuning_name,
+                practice_minutes=minutes,
+            )
+
+        frame = PracticeSessionFrame(
+            root,
+            stats=stats,
+            stats_path=STATS_PATH,
+            minutes=minutes,
+            max_fret=max_fret,
+            tuning=tuning,
+            tuning_name=tuning_name,
+            allowed_strings=allowed_strings,
+            allowed_frets=allowed_frets,
+            on_back=show_menu,
+            on_finish=on_finish,
+        )
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+
     def show_practice_summary(
         summary: PracticeSummary,
         *,
@@ -55,10 +92,53 @@ def run_gui() -> None:
         def repeat() -> None:
             start_mode(mode, num_questions, max_fret, tuning_name, practice_minutes)
 
+        def train_weak_strings() -> None:
+            # summary labels are "String 1..6" (GUI). Convert to core indices.
+            # core: 0=low E ... 5=high e ; GUI string number: 1=high e ... 6=low E
+            allowed = set()
+            for label, attempts, acc in summary.weak_strings:
+                parts = label.split()
+                if len(parts) == 2 and parts[0].lower() == "string":
+                    n = int(parts[1])  # 1..6
+                    core_idx = 6 - n   # 1->5, 6->0
+                    allowed.add(core_idx)
+
+            if not allowed:
+                allowed = None
+
+            start_practice_filtered(
+                max_fret=max_fret,
+                tuning_name=tuning_name,
+                minutes=practice_minutes,
+                allowed_strings=allowed,
+                allowed_frets=None,
+            )
+
+        def train_weak_frets() -> None:
+            allowed = set()
+            for label, attempts, acc in summary.weak_frets:
+                parts = label.split()
+                if len(parts) == 2 and parts[0].lower() == "fret":
+                    f = int(parts[1])
+                    allowed.add(f)
+
+            if not allowed:
+                allowed = None
+
+            start_practice_filtered(
+                max_fret=max_fret,
+                tuning_name=tuning_name,
+                minutes=practice_minutes,
+                allowed_strings=None,
+                allowed_frets=allowed,
+            )
+
         frame = PracticeSummaryFrame(
             root,
             summary=summary,
             on_show_heatmap=show_heatmap,
+            on_train_weak_strings=train_weak_strings,
+            on_train_weak_frets=train_weak_frets,
             on_repeat=repeat,
             on_back=show_menu,
         )
