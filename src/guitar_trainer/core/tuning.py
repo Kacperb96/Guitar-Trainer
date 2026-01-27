@@ -1,26 +1,47 @@
 from __future__ import annotations
 
 # Note index: C=0, C#=1, ..., B=11
-# Strings order (core): 0=low E ... 5=high e
+# Tuning list is in CORE order: 0 = lowest string ... last = highest string
 
-STANDARD_TUNING = [4, 9, 2, 7, 11, 4]  # E A D G B E
-
-TUNING_PRESETS: dict[str, list[int]] = {
-    "E Standard": [4, 9, 2, 7, 11, 4],          # E A D G B E
-    "Eb Standard (D#)": [3, 8, 1, 6, 10, 3],     # Eb Ab Db Gb Bb Eb
-    "D Standard": [2, 7, 0, 5, 9, 2],            # D G C F A D
-    "Drop D": [2, 9, 2, 7, 11, 4],               # D A D G B E
-    "Drop C#": [1, 8, 1, 6, 10, 3],              # C# G# C# F# A# D#
-    "Drop C": [0, 7, 0, 5, 9, 2],                # C G C F A D
+TUNING_PRESETS_6: dict[str, list[int]] = {
+    "E Standard": [4, 9, 2, 7, 11, 4],            # E A D G B E
+    "Eb Standard (D#)": [3, 8, 1, 6, 10, 3],       # Eb Ab Db Gb Bb Eb
+    "D Standard": [2, 7, 0, 5, 9, 2],              # D G C F A D
+    "Drop D": [2, 9, 2, 7, 11, 4],                 # D A D G B E
+    "Drop C#": [1, 8, 1, 6, 10, 3],                # C# G# C# F# A# D#
+    "Drop C": [0, 7, 0, 5, 9, 2],                  # C G C F A D
 }
 
-DEFAULT_TUNING_NAME = "E Standard"
+TUNING_PRESETS_7: dict[str, list[int]] = {
+    "B Standard": [11, 4, 9, 2, 7, 11, 4],         # B E A D G B E
+    "Bb Standard (A#)": [10, 3, 8, 1, 6, 10, 3],   # Bb Eb Ab Db Gb Bb Eb
+    "A Standard": [9, 2, 7, 0, 5, 9, 2],           # A D G C F A D
+    "Drop A": [9, 4, 9, 2, 7, 11, 4],              # A E A D G B E
+}
+
+DEFAULT_NUM_STRINGS = 6
+DEFAULT_TUNING_NAME_6 = "E Standard"
+DEFAULT_TUNING_NAME_7 = "B Standard"
 
 
-def get_tuning_by_name(name: str) -> list[int]:
-    """
-    Returns a COPY of the tuning list for safety.
-    Falls back to E Standard if unknown.
-    """
-    tuning = TUNING_PRESETS.get(name, TUNING_PRESETS[DEFAULT_TUNING_NAME])
-    return list(tuning)
+def get_tuning_presets(num_strings: int) -> dict[str, list[int]]:
+    if num_strings == 7:
+        return TUNING_PRESETS_7
+    return TUNING_PRESETS_6
+
+
+def get_default_tuning_name(num_strings: int) -> str:
+    return DEFAULT_TUNING_NAME_7 if num_strings == 7 else DEFAULT_TUNING_NAME_6
+
+
+def get_tuning_by_name(num_strings: int, name: str) -> list[int]:
+    presets = get_tuning_presets(num_strings)
+    default_name = get_default_tuning_name(num_strings)
+    tuning = presets.get(name, presets[default_name])
+    return list(tuning)  # copy
+
+
+# Backward-compatible constants (6-string)
+STANDARD_TUNING = list(TUNING_PRESETS_6[DEFAULT_TUNING_NAME_6])
+TUNING_PRESETS = TUNING_PRESETS_6
+DEFAULT_TUNING_NAME = DEFAULT_TUNING_NAME_6

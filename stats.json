@@ -1,8 +1,8 @@
 {
   "by_mode": {
     "A": {
-      "attempts": 112,
-      "correct": 106
+      "attempts": 113,
+      "correct": 107
     },
     "B": {
       "attempts": 1,
@@ -43,8 +43,8 @@
       "correct": 12
     },
     "F": {
-      "attempts": 11,
-      "correct": 10
+      "attempts": 12,
+      "correct": 11
     },
     "F#": {
       "attempts": 5,
@@ -261,8 +261,8 @@
       "correct": 2
     },
     "5,1": {
-      "attempts": 1,
-      "correct": 1
+      "attempts": 2,
+      "correct": 2
     },
     "5,10": {
       "attempts": 1,
@@ -319,10 +319,10 @@
       "correct": 14
     },
     "5": {
-      "attempts": 17,
-      "correct": 15
+      "attempts": 18,
+      "correct": 16
     }
   },
-  "total_attempts": 113,
-  "total_correct": 107
+  "total_attempts": 114,
+  "total_correct": 108
 }

@@ -1,72 +1,128 @@
-from typing import Optional, Tuple
+from __future__ import annotations
 
-Position = Tuple[int, int]  # (string_index, fret)
+from dataclasses import dataclass
 
 
-def compute_geometry(
-    canvas_w: int,
-    canvas_h: int,
+@dataclass(frozen=True)
+class FretboardLayout:
+    width: int
+    height: int
+    num_frets: int
+    num_strings: int
+    margin_x: int
+    margin_y: int
+    nut_width: int
+    fret_width: float
+    string_spacing: float
+
+
+def compute_layout(
+    width: int,
+    height: int,
+    *,
     num_frets: int,
-) -> tuple[int, int, int, int]:
-    """
-    Compute fretboard geometry from available canvas size.
+    num_strings: int,
+    margin_x: int = 20,
+    margin_y: int = 20,
+    nut_width: int = 40,
+) -> FretboardLayout:
+    width = max(1, int(width))
+    height = max(1, int(height))
+    num_frets = max(1, int(num_frets))
+    num_strings = max(1, int(num_strings))
 
-    Returns:
-        margin_x, margin_y, fret_width, string_spacing
-    """
-    if canvas_w <= 0 or canvas_h <= 0:
-        raise ValueError("Canvas size must be positive")
+    usable_w = max(1, width - 2 * margin_x - nut_width)
+    fret_width = usable_w / num_frets
 
-    footer_h = 26
+    if num_strings == 1:
+        string_spacing = 0.0
+    else:
+        usable_h = max(1, height - 2 * margin_y)
+        string_spacing = usable_h / (num_strings - 1)
 
-    margin_x = max(26, min(70, int(canvas_w * 0.06)))
-    margin_y = max(18, min(60, int(canvas_h * 0.06)))
+    return FretboardLayout(
+        width=width,
+        height=height,
+        num_frets=num_frets,
+        num_strings=num_strings,
+        margin_x=margin_x,
+        margin_y=margin_y,
+        nut_width=nut_width,
+        fret_width=fret_width,
+        string_spacing=string_spacing,
+    )
 
-    usable_w = max(200, canvas_w - 2 * margin_x)
-    usable_h = max(160, canvas_h - 2 * margin_y - footer_h)
 
-    fret_width = max(22, min(90, int(usable_w / (num_frets + 1))))
-    string_spacing = max(22, min(70, int(usable_h / 5)))
+def position_to_rect(layout: FretboardLayout, string_index: int, fret: int) -> tuple[float, float, float, float] | None:
+    if string_index < 0 or string_index >= layout.num_strings:
+        return None
+    if fret < 0 or fret > layout.num_frets:
+        return None
 
-    return margin_x, margin_y, fret_width, string_spacing
+    # GUI rows: 0 is top (highest string). Core string_index 0 is lowest.
+    gui_row = (layout.num_strings - 1) - string_index
+    y = layout.margin_y + gui_row * layout.string_spacing
+
+    if fret == 0:
+        x0 = layout.margin_x
+        x1 = layout.margin_x + layout.nut_width
+    else:
+        x0 = layout.margin_x + layout.nut_width + (fret - 1) * layout.fret_width
+        x1 = x0 + layout.fret_width
+
+    y0 = y - layout.string_spacing / 2 if layout.num_strings > 1 else y - 10
+    y1 = y + layout.string_spacing / 2 if layout.num_strings > 1 else y + 10
+    return (x0, y0, x1, y1)
 
 
 def pixel_to_position(
-    x: int,
-    y: int,
+    x: float,
+    y: float,
     *,
+    width: int,
+    height: int,
     num_frets: int,
-    margin_x: int,
-    margin_y: int,
-    fret_width: int,
-    string_spacing: int,
-) -> Optional[Position]:
-    """
-    Convert pixel coordinates to (string_index, fret).
+    num_strings: int,
+    margin_x: int = 20,
+    margin_y: int = 20,
+    nut_width: int = 40,
+) -> tuple[int, int] | None:
+    layout = compute_layout(
+        width,
+        height,
+        num_frets=num_frets,
+        num_strings=num_strings,
+        margin_x=margin_x,
+        margin_y=margin_y,
+        nut_width=nut_width,
+    )
 
-    GUI orientation:
-    - top = string 1 (high e)
-    - bottom = string 6 (low E)
-
-    Core orientation:
-    - string_index 0 = low E
-    - string_index 5 = high e
-    """
-    left = margin_x
-    right = margin_x + (num_frets + 1) * fret_width
-    top = margin_y
-    bottom = margin_y + 5 * string_spacing
-
-    if x < left or x > right or y < top or y > bottom:
+    # vertical bounds
+    top_y = layout.margin_y
+    bot_y = layout.margin_y + (layout.num_strings - 1) * layout.string_spacing
+    if y < top_y - 0.5 * layout.string_spacing or y > bot_y + 0.5 * layout.string_spacing:
         return None
 
-    fret = (x - left) // fret_width
-    if fret < 0 or fret > num_frets:
+    # find nearest string (gui row)
+    if layout.num_strings == 1:
+        gui_row = 0
+    else:
+        gui_row = int(round((y - layout.margin_y) / layout.string_spacing))
+        gui_row = max(0, min(layout.num_strings - 1, gui_row))
+
+    string_index = (layout.num_strings - 1) - gui_row  # back to core index
+
+    # fret
+    nut_x0 = layout.margin_x
+    nut_x1 = layout.margin_x + layout.nut_width
+    if x < nut_x0 or x > (layout.margin_x + layout.nut_width + layout.num_frets * layout.fret_width):
         return None
 
-    gui_row = (y - top) // string_spacing
-    if gui_row < 0 or gui_row > 5:
-        return None
+    if x <= nut_x1:
+        fret = 0
+    else:
+        rel = x - nut_x1
+        fret = int(rel // layout.fret_width) + 1
+        fret = max(1, min(layout.num_frets, fret))
 
-    string_index = 5 - int(gui_row)
-    return int(string_index), int(fret)
+    return (string_index, fret)

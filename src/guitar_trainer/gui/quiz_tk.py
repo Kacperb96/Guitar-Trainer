@@ -11,7 +11,6 @@ from guitar_trainer.core.quiz import (
     check_positions_answer,
 )
 from guitar_trainer.core.stats import Stats, save_stats
-from guitar_trainer.core.tuning import STANDARD_TUNING
 from guitar_trainer.gui.fretboard import Fretboard, Position
 
 
@@ -24,8 +23,8 @@ class NoteQuizFrame(tk.Frame):
         stats_path: str,
         num_questions: int = 10,
         max_fret: int = 12,
-        tuning: list[int] = STANDARD_TUNING,
-        tuning_name: str = "E Standard",
+        tuning: list[int],
+        tuning_name: str,
         prefer_flats: bool = False,
         rng_seed: int | None = None,
         on_back=None,
@@ -36,9 +35,10 @@ class NoteQuizFrame(tk.Frame):
         self.stats_path = stats_path
         self.num_questions = num_questions
         self.max_fret = max_fret
-        self.tuning = tuning
+        self.tuning = list(tuning)
         self.tuning_name = tuning_name
         self.prefer_flats = prefer_flats
+        self.num_strings = len(self.tuning)
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
 
@@ -50,9 +50,8 @@ class NoteQuizFrame(tk.Frame):
 
         header = tk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
-
         display = "Flats" if prefer_flats else "Sharps"
-        tk.Label(header, text=f"Mode A: Guess the note | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
+        tk.Label(header, text=f"Mode A | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
         if self.on_back:
             tk.Button(header, text="Back to menu", command=self._back).pack(side="right")
 
@@ -64,12 +63,10 @@ class NoteQuizFrame(tk.Frame):
 
         entry_row = tk.Frame(self)
         entry_row.pack(pady=(6, 2))
-
         tk.Label(entry_row, text="Your answer:").pack(side=tk.LEFT)
         self.answer_var = tk.StringVar()
         self.answer_entry = tk.Entry(entry_row, textvariable=self.answer_var, width=10)
         self.answer_entry.pack(side=tk.LEFT, padx=(6, 0))
-
         self.submit_btn = tk.Button(entry_row, text="Submit", command=self.submit_answer)
         self.submit_btn.pack(side=tk.LEFT, padx=(8, 0))
 
@@ -89,7 +86,7 @@ class NoteQuizFrame(tk.Frame):
         )
 
     def pick_next_position(self) -> Position:
-        return random_position(self.max_fret, rng=self.rng)
+        return random_position(self.max_fret, tuning=self.tuning, rng=self.rng)
 
     def next_question(self) -> None:
         if self.current_index >= self.num_questions:
@@ -147,10 +144,10 @@ class NoteQuizFrame(tk.Frame):
 class AdaptiveNoteQuizFrame(NoteQuizFrame):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        tk.Label(self, text="Adaptive mode: focuses weak / unseen positions", fg="gray").pack(pady=(0, 6))
+        tk.Label(self, text="Adaptive: weak / unseen positions", fg="gray").pack(pady=(0, 6))
 
     def pick_next_position(self) -> Position:
-        return choose_adaptive_position(self.stats, self.max_fret, self.rng)
+        return choose_adaptive_position(self.stats, self.max_fret, self.rng, num_strings=self.num_strings)
 
 
 class PositionsQuizFrame(tk.Frame):
@@ -162,8 +159,8 @@ class PositionsQuizFrame(tk.Frame):
         stats_path: str,
         num_questions: int = 5,
         max_fret: int = 12,
-        tuning: list[int] = STANDARD_TUNING,
-        tuning_name: str = "E Standard",
+        tuning: list[int],
+        tuning_name: str,
         prefer_flats: bool = False,
         rng_seed: int | None = None,
         on_back=None,
@@ -174,9 +171,10 @@ class PositionsQuizFrame(tk.Frame):
         self.stats_path = stats_path
         self.num_questions = num_questions
         self.max_fret = max_fret
-        self.tuning = tuning
+        self.tuning = list(tuning)
         self.tuning_name = tuning_name
         self.prefer_flats = prefer_flats
+        self.num_strings = len(self.tuning)
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
         self.on_back = on_back
@@ -191,15 +189,13 @@ class PositionsQuizFrame(tk.Frame):
 
         header = tk.Frame(self)
         header.pack(fill="x", pady=(0, 8))
-
         display = "Flats" if prefer_flats else "Sharps"
-        tk.Label(header, text=f"Mode B: Find all positions | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
+        tk.Label(header, text=f"Mode B | {tuning_name} | {display}", font=("Arial", 13)).pack(side="left")
         if self.on_back:
             tk.Button(header, text="Back to menu", command=self._back).pack(side="right")
 
         self.progress = tk.Label(self, text="")
         self.progress.pack(pady=(0, 6))
-
         self.task = tk.Label(self, text="")
         self.task.pack(pady=(0, 6))
 
@@ -209,10 +205,8 @@ class PositionsQuizFrame(tk.Frame):
 
         controls = tk.Frame(self)
         controls.pack(pady=(6, 2))
-
         self.clear_btn = tk.Button(controls, text="Clear", command=self.clear_selection)
         self.clear_btn.pack(side=tk.LEFT)
-
         self.submit_btn = tk.Button(controls, text="Submit", command=self.submit_selection)
         self.submit_btn.pack(side=tk.LEFT, padx=(8, 0))
 
@@ -244,7 +238,6 @@ class PositionsQuizFrame(tk.Frame):
 
         self.target_note_index = self.rng.randint(0, 11)
         self.target_note_name = index_to_name(self.target_note_index, prefer_flats=self.prefer_flats)
-
         self.task.config(text=f"Click ALL positions for note {self.target_note_name} (up to fret {self.max_fret})")
 
     def clear_selection(self) -> None:
@@ -257,34 +250,22 @@ class PositionsQuizFrame(tk.Frame):
     def on_fretboard_click(self, position: Position) -> None:
         if self.locked:
             return
-
         if position in self.selected:
             self.selected.remove(position)
             self.fretboard.clear_cell_marker(position)
         else:
             self.selected.add(position)
             self.fretboard.set_cell_marker(position, outline="blue")
-
         self.feedback.config(text=f"Selected: {len(self.selected)}")
 
     def submit_selection(self) -> None:
         if self.locked or self.target_note_index is None:
             return
 
-        correct = check_positions_answer(
-            self.target_note_index,
-            self.max_fret,
-            list(self.selected),
-            tuning=self.tuning,
-        )
-
-        self.stats.record_attempt_mode_b(
-            correct=correct,
-            note_name=self.target_note_name,
-        )
+        correct = check_positions_answer(self.target_note_index, self.max_fret, list(self.selected), tuning=self.tuning)
+        self.stats.record_attempt_mode_b(correct=correct, note_name=self.target_note_name)
 
         correct_positions = set(positions_for_note(self.target_note_index, self.max_fret, tuning=self.tuning))
-
         self.locked = True
         self.fretboard.clear_all_cell_markers()
 
@@ -308,7 +289,6 @@ class PositionsQuizFrame(tk.Frame):
         self.feedback.config(
             text=f"❌ Wrong | correct: {len(correct_positions)} | selected: {len(self.selected)} | wrong: {len(wrong)} | missing: {len(missing)}"
         )
-
         self.after(1400, self.next_question)
 
     def finish(self) -> None:

@@ -5,57 +5,50 @@ from typing import Tuple
 
 from guitar_trainer.core.stats import Stats
 
-Position = Tuple[int, int]  # (string_index, fret)
-
 
 def _pos_key(s: int, f: int) -> str:
     return f"{s},{f}"
+
+
+def _attempts_correct(stats: Stats, s: int, f: int) -> tuple[int, int]:
+    data = stats.by_position.get(_pos_key(s, f))
+    if not data:
+        return 0, 0
+    return int(data.get("attempts", 0)), int(data.get("correct", 0))
 
 
 def choose_adaptive_position(
     stats: Stats,
     max_fret: int,
     rng: random.Random,
-) -> Position:
+    *,
+    num_strings: int = 6,
+) -> Tuple[int, int]:
     """
-    Choose a (string,fret) with weights that prefer:
-    - positions with fewer attempts
-    - positions with lower accuracy
-
-    Uses stats.by_position where key is "string,fret" -> {"attempts": int, "correct": int}
+    Returns a position (string_index, fret) focusing weak/unseen positions.
+    Works for 6/7 strings (or any num_strings >= 1).
     """
+    if num_strings <= 0:
+        raise ValueError("num_strings must be >= 1")
     if max_fret < 0:
         raise ValueError("max_fret must be >= 0")
 
-    candidates: list[Position] = []
+    positions: list[tuple[int, int]] = []
     weights: list[float] = []
 
-    for s in range(6):
+    for s in range(num_strings):
         for f in range(max_fret + 1):
-            key = _pos_key(s, f)
-            data = stats.by_position.get(key, {})
-            attempts = int(data.get("attempts", 0))
-            correct = int(data.get("correct", 0))
+            attempts, correct = _attempts_correct(stats, s, f)
 
-            # accuracy: if never practiced, treat as 0.0 (unknown => needs practice)
-            accuracy = (correct / attempts) if attempts > 0 else 0.0
+            if attempts == 0:
+                weight = 5.0
+            else:
+                acc = correct / attempts
+                # prefer low accuracy + low attempts
+                weight = (1.0 - acc) + (1.0 / (attempts + 1)) + 0.05
 
-            # "need practice" score:
-            # - unseen positions: high score
-            # - low accuracy: high score
-            # - many attempts: lower score
-            unseen_bonus = 1.0 if attempts == 0 else 0.0
-            low_attempts = 1.0 / (attempts + 1)          # 1.0, 0.5, 0.33, ...
-            error_rate = 1.0 - accuracy                  # 1.0..0.0
-
-            # Weighted mix (tuned for nice behavior)
-            need = 0.55 * error_rate + 0.35 * low_attempts + 0.10 * unseen_bonus
-
-            # Always keep some baseline randomness so nothing becomes impossible to draw
-            weight = 0.05 + need
-
-            candidates.append((s, f))
+            positions.append((s, f))
             weights.append(weight)
 
-    # random.choices returns a list
-    return rng.choices(candidates, weights=weights, k=1)[0]
+    # rng.choices works well
+    return rng.choices(positions, weights=weights, k=1)[0]

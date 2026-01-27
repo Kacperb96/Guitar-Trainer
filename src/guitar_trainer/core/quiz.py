@@ -10,12 +10,20 @@ from guitar_trainer.core.mapping import note_index_at, positions_for_note
 Position = Tuple[int, int]  # (string_index, fret)
 
 
-def random_position(max_fret: int, rng: random.Random | None = None) -> Position:
+def random_position(
+    max_fret: int,
+    *,
+    tuning: list[int] = STANDARD_TUNING,
+    rng: random.Random | None = None,
+) -> Position:
     if max_fret < 0:
         raise ValueError("max_fret must be >= 0")
+    if not tuning:
+        raise ValueError("tuning must not be empty")
+
     r = rng if rng is not None else random
     fret = r.randint(0, max_fret)
-    string_index = r.randint(0, 5)
+    string_index = r.randint(0, len(tuning) - 1)
     return (string_index, fret)
 
 

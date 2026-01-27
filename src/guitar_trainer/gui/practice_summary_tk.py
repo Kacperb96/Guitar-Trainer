@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Callable
 
 
 @dataclass(frozen=True)
@@ -10,13 +10,13 @@ class PracticeSummary:
     minutes: int
     max_fret: int
     tuning_name: str
+    num_strings: int
 
     answered: int
     correct: int
     accuracy_percent: float
     avg_time_sec: float
 
-    # items: (label, attempts, accuracy_percent_or_None)
     weak_strings: List[Tuple[str, int, float | None]]
     weak_frets: List[Tuple[str, int, float | None]]
 
@@ -27,11 +27,11 @@ class PracticeSummaryFrame(tk.Frame):
         master: tk.Misc,
         *,
         summary: PracticeSummary,
-        on_show_heatmap: callable | None = None,      # callback(max_fret)
-        on_train_weak_strings: callable | None = None,  # callback()
-        on_train_weak_frets: callable | None = None,    # callback()
-        on_repeat: callable | None = None,            # callback()
-        on_back: callable | None = None,              # callback()
+        on_show_heatmap: Optional[Callable[[int], None]] = None,   # callback(max_fret)
+        on_train_weak_strings: Optional[Callable[[], None]] = None,
+        on_train_weak_frets: Optional[Callable[[], None]] = None,
+        on_repeat: Optional[Callable[[], None]] = None,
+        on_back: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(master)
 
@@ -40,12 +40,11 @@ class PracticeSummaryFrame(tk.Frame):
 
         subtitle = tk.Label(
             self,
-            text=f"{summary.minutes} min | Max fret: {summary.max_fret} | Tuning: {summary.tuning_name}",
+            text=f"{summary.minutes} min | Max fret: {summary.max_fret} | {summary.num_strings}-string | Tuning: {summary.tuning_name}",
             fg="gray",
         )
         subtitle.pack(pady=(0, 12))
 
-        # ---- Results ----
         card = tk.LabelFrame(self, text="Results")
         card.pack(fill="x", padx=12, pady=8)
 
@@ -56,11 +55,10 @@ class PracticeSummaryFrame(tk.Frame):
             tk.Label(r, text=value, font=("Arial", 11, "bold")).pack(side="right")
 
         row("Answered", str(summary.answered))
-        row("Correct", f"{summary.correct}")
+        row("Correct", str(summary.correct))
         row("Accuracy", f"{summary.accuracy_percent:.1f}%")
         row("Avg response time", f"{summary.avg_time_sec:.2f}s")
 
-        # ---- Weak areas ----
         weak = tk.LabelFrame(self, text="Weak areas (based on your saved stats)")
         weak.pack(fill="x", padx=12, pady=8)
 
@@ -73,25 +71,17 @@ class PracticeSummaryFrame(tk.Frame):
 
         left = tk.Frame(weak)
         left.pack(side="left", fill="both", expand=True, padx=10, pady=8)
-
         right = tk.Frame(weak)
         right.pack(side="left", fill="both", expand=True, padx=10, pady=8)
 
         tk.Label(left, text="Weak strings", font=("Arial", 11, "bold")).pack(anchor="w")
-        if summary.weak_strings:
-            for label, attempts, acc in summary.weak_strings:
-                tk.Label(left, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
-        else:
-            tk.Label(left, text="No data yet.", fg="gray").pack(anchor="w")
+        for label, attempts, acc in summary.weak_strings:
+            tk.Label(left, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
 
         tk.Label(right, text="Weak frets", font=("Arial", 11, "bold")).pack(anchor="w")
-        if summary.weak_frets:
-            for label, attempts, acc in summary.weak_frets:
-                tk.Label(right, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
-        else:
-            tk.Label(right, text="No data yet.", fg="gray").pack(anchor="w")
+        for label, attempts, acc in summary.weak_frets:
+            tk.Label(right, text="• " + fmt_item(label, attempts, acc), fg="gray").pack(anchor="w")
 
-        # ---- Actions ----
         actions = tk.Frame(self)
         actions.pack(pady=14)
 

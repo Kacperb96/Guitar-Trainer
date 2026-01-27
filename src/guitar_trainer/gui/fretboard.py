@@ -1,256 +1,265 @@
+from __future__ import annotations
+
 import tkinter as tk
-from typing import Callable, Tuple
+from typing import Callable, Optional
 
-from guitar_trainer.core.mapping import note_index_at
-from guitar_trainer.core.notes import index_to_name
-from guitar_trainer.core.tuning import STANDARD_TUNING
-from guitar_trainer.gui.fretboard_math import compute_geometry, pixel_to_position
+from guitar_trainer.gui.fretboard_math import compute_layout, pixel_to_position, position_to_rect
 
-Position = Tuple[int, int]  # (string_index, fret)
+Position = tuple[int, int]  # (string_index, fret)
 
 
 class Fretboard(tk.Frame):
+    """
+    Draws a fretboard for N strings (len(tuning)) and num_frets.
+
+    GUI string numbers:
+      1 at TOP (highest string), N at bottom (lowest).
+
+    Core string_index:
+      0 = lowest string ... N-1 = highest string.
+
+    Fixes:
+    - prevents the fretboard from becoming "giant" when the window is tall
+      by capping the string spacing (max_string_spacing).
+    - highlights current target as a RED CIRCLE (not a blue rectangle).
+    """
+
     def __init__(
         self,
         master: tk.Misc,
         *,
-        num_frets: int = 12,
-        tuning=STANDARD_TUNING,
-        enable_click_reporting: bool = True,
+        num_frets: int,
+        tuning: list[int],
+        enable_click_reporting: bool = False,
+        max_string_spacing: int = 48,  # <--- key: cap vertical stretch
     ) -> None:
         super().__init__(master)
 
-        self.num_frets = num_frets
-        self.tuning = tuning
+        self.num_frets = int(num_frets)
+        self.tuning = list(tuning)
+        self.num_strings = len(self.tuning)
+        if self.num_strings <= 0:
+            raise ValueError("tuning must contain at least 1 string")
 
-        self.margin_x = 30
-        self.margin_y = 20
-        self.fret_width = 50
-        self.string_spacing = 30
+        self.enable_click_reporting = enable_click_reporting
+        self.max_string_spacing = int(max_string_spacing)
 
-        self._last_size: tuple[int, int] | None = None
+        self._click_cb: Optional[Callable[[Position], None]] = None
 
-        # redraw state
-        self._single_highlight: Position | None = None
-        self._cell_markers: dict[Position, str] = {}
-        self._heatmap: dict[Position, str] = {}
-
-        self.canvas = tk.Canvas(self, bg="white", highlightthickness=0)
+        # Give the canvas a sensible default height so the UI doesn't look huge
+        # even before resize. (Still expands, but spacing is capped anyway.)
+        self.canvas = tk.Canvas(self, highlightthickness=0, height=320)
         self.canvas.pack(fill="both", expand=True)
 
-        self.status = tk.Label(self, text="Click on the fretboard")
-        self.status.pack(pady=5)
+        self._single_highlight: Position | None = None
+        self._cell_markers: dict[Position, str] = {}  # position -> outline color
+        self._heatmap_values: dict[Position, float] = {}
 
-        self._click_callback: Callable[[Position], None] | None = None
-
-        self.canvas.bind("<Configure>", self._on_resize)
-        if enable_click_reporting:
+        self.canvas.bind("<Configure>", lambda _e: self.redraw())
+        if self.enable_click_reporting:
             self.canvas.bind("<Button-1>", self._on_click)
 
-    # ---------- public API ----------
+    # ---------- callbacks ----------
 
-    def set_click_callback(self, callback: Callable[[Position], None]) -> None:
-        self._click_callback = callback
+    def set_click_callback(self, cb: Callable[[Position], None]) -> None:
+        self._click_cb = cb
 
-    def highlight_position(self, pos: Position) -> None:
-        self._single_highlight = pos
+    def _on_click(self, event) -> None:
+        if not self._click_cb:
+            return
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+
+        # Use the *effective* height logic (same as redraw) for hit-testing.
+        # We do it by asking pixel_to_position with current w/h but we cap spacing there by
+        # giving compute_layout real canvas size and then visually we cap spacing below.
+        pos = pixel_to_position(
+            event.x,
+            event.y,
+            width=w,
+            height=h,
+            num_frets=self.num_frets,
+            num_strings=self.num_strings,
+        )
+        if pos is None:
+            return
+        self._click_cb(pos)
+
+    # ---------- heatmap ----------
+
+    def set_heatmap(self, values: dict[Position, float]) -> None:
+        """values[(string_index, fret)] = float 0..1, drawn under strings/dots."""
+        self._heatmap_values = dict(values)
+        self.redraw()
+
+    def clear_heatmap(self) -> None:
+        self._heatmap_values.clear()
+        self.redraw()
+
+    # ---------- markers / highlight ----------
+
+    def highlight_position(self, position: Position) -> None:
+        self._single_highlight = position
         self.redraw()
 
     def clear_single_highlight(self) -> None:
         self._single_highlight = None
         self.redraw()
 
-    def set_cell_marker(self, pos: Position, *, outline: str = "black") -> None:
-        self._cell_markers[pos] = outline
+    def set_cell_marker(self, position: Position, *, outline: str = "blue") -> None:
+        self._cell_markers[position] = outline
         self.redraw()
 
-    def clear_cell_marker(self, pos: Position) -> None:
-        self._cell_markers.pop(pos, None)
-        self.redraw()
+    def clear_cell_marker(self, position: Position) -> None:
+        if position in self._cell_markers:
+            del self._cell_markers[position]
+            self.redraw()
 
     def clear_all_cell_markers(self) -> None:
         self._cell_markers.clear()
         self.redraw()
 
-    def set_heatmap_cell(self, pos: Position, *, fill: str) -> None:
-        self._heatmap[pos] = fill
-        self.redraw()
+    # ---------- drawing helpers ----------
 
-    def clear_heatmap(self) -> None:
-        self._heatmap.clear()
-        self.redraw()
+    def _effective_layout(self, w: int, h: int):
+        """
+        Create a layout but cap the string spacing so it won't explode with tall windows.
+        Then center the board vertically.
+        """
+        layout = compute_layout(w, h, num_frets=self.num_frets, num_strings=self.num_strings)
 
-    # ---------- geometry & drawing ----------
+        if self.num_strings > 1:
+            # Cap vertical spacing
+            spacing = min(layout.string_spacing, float(self.max_string_spacing))
+        else:
+            spacing = 0.0
 
-    def _on_resize(self, event: tk.Event) -> None:
-        size = (event.width, event.height)
-        if size == self._last_size:
-            return
+        # Compute board height using capped spacing
+        if self.num_strings == 1:
+            board_h = 40
+        else:
+            board_h = (self.num_strings - 1) * spacing
 
-        self._last_size = size
-        self.margin_x, self.margin_y, self.fret_width, self.string_spacing = (
-            compute_geometry(event.width, event.height, self.num_frets)
-        )
-        self.redraw()
+        # Center vertically inside available height
+        top_y = layout.margin_y
+        desired_top = (h - board_h) / 2.0
+        top_y = max(layout.margin_y, desired_top)
+
+        return layout, spacing, top_y
+
+    def _cell_center(self, x0: float, y0: float, x1: float, y1: float) -> tuple[float, float]:
+        return (0.5 * (x0 + x1), 0.5 * (y0 + y1))
+
+    # ---------- redraw ----------
 
     def redraw(self) -> None:
-        """
-        Layer order (bottom -> top):
-        1) heatmap
-        2) fretboard base (frets, nut, dots, strings, labels)
-        3) quiz markers (circles)
-        """
         self.canvas.delete("all")
-        self._draw_heatmap()   # <- FIRST layer
-        self._draw_base()      # <- then frets/strings/dots on top
-        self._draw_markers()   # <- markers on top of everything
 
-    def _board_bounds(self) -> tuple[int, int, int, int]:
-        left = self.margin_x
-        right = left + (self.num_frets + 1) * self.fret_width
-        top = self.margin_y
-        bottom = top + 5 * self.string_spacing
-        return left, right, top, bottom
+        w = max(1, self.canvas.winfo_width())
+        h = max(1, self.canvas.winfo_height())
+        layout, spacing, top_y = self._effective_layout(w, h)
 
-    def _draw_fret_dots(self) -> None:
-        """
-        Draw classic fretboard position markers:
-        single dots: 3,5,7,9,15,17,19,21
-        double dots: 12,24
-        """
-        left, _right, top, _bottom = self._board_bounds()
+        # Rebuild a "virtual" layout for drawing Y positions with our capped spacing + top_y.
+        # We'll do it manually (so we don't have to change fretboard_math tests).
+        left_x = layout.margin_x
+        nut_x1 = layout.margin_x + layout.nut_width
+        right_x = nut_x1 + layout.num_frets * layout.fret_width
 
-        single = {3, 5, 7, 9, 15, 17, 19, 21}
-        double = {12, 24}
+        if self.num_strings == 1:
+            first_string_y = top_y
+            last_string_y = top_y
+            half_band = 18
+        else:
+            first_string_y = top_y
+            last_string_y = top_y + (self.num_strings - 1) * spacing
+            half_band = 0.5 * spacing
 
-        r = max(4, min(self.fret_width, self.string_spacing) // 6)
+        band_top = first_string_y - half_band
+        band_bot = last_string_y + half_band
 
-        y_single = top + int(2.5 * self.string_spacing)
-        y_double_a = top + int(1.5 * self.string_spacing)
-        y_double_b = top + int(3.5 * self.string_spacing)
+        # Background areas
+        self.canvas.create_rectangle(left_x, band_top, nut_x1, band_bot, outline="", fill="#f0f0f0")  # open strings area
+        self.canvas.create_rectangle(nut_x1, band_top, right_x, band_bot, outline="", fill="#ffffff")  # board
+        self.canvas.create_rectangle(left_x, band_top, right_x, band_bot, outline="black", width=2)
 
-        for fret in range(0, self.num_frets + 1):
-            if fret in single or fret in double:
-                x = left + fret * self.fret_width + self.fret_width // 2
+        # Heatmap (UNDER strings/dots)
+        if self._heatmap_values:
+            for (s, f), v in self._heatmap_values.items():
+                if not (0 <= s < self.num_strings and 0 <= f <= self.num_frets):
+                    continue
+                v = max(0.0, min(1.0, float(v)))
+                intensity = int(255 * (1.0 - v))
+                color = f"#{intensity:02x}{intensity:02x}{intensity:02x}"
 
-                if fret in double:
-                    for y in (y_double_a, y_double_b):
-                        self.canvas.create_oval(
-                            x - r, y - r, x + r, y + r,
-                            fill="gray", outline=""
-                        )
-                else:
-                    self.canvas.create_oval(
-                        x - r, y_single - r, x + r, y_single + r,
-                        fill="gray", outline=""
-                    )
+                # Use math rect but adjust Y to our capped spacing + top_y
+                rect = position_to_rect(layout, s, f)
+                if rect is None:
+                    continue
+                x0, y0, x1, y1 = rect
 
-    def _draw_base(self) -> None:
-        left, right, top, bottom = self._board_bounds()
+                # Override y0/y1 based on capped spacing
+                gui_row = (self.num_strings - 1) - s
+                y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
+                y0 = y - half_band
+                y1 = y + half_band
 
-        # open-string area (fret 0) – highlighted
-        self.canvas.create_rectangle(
-            left,
-            top,
-            left + self.fret_width,
-            bottom,
-            fill="#f2f2f2",
-            outline="",
-        )
+                self.canvas.create_rectangle(x0, y0, x1, y1, outline="", fill=color)
 
-        # frets (vertical lines)
-        for f in range(self.num_frets + 2):
-            x = left + f * self.fret_width
-            self.canvas.create_line(x, top, x, bottom, width=2 if f == 0 else 1)
+        # Frets
+        self.canvas.create_line(nut_x1, band_top, nut_x1, band_bot, width=4)
+        for i in range(1, layout.num_frets + 1):
+            x = nut_x1 + i * layout.fret_width
+            self.canvas.create_line(x, band_top, x, band_bot, width=2)
 
-        # nut line (between open area and fret 1) – thicker
-        nut_x = left + self.fret_width
-        self.canvas.create_line(nut_x, top, nut_x, bottom, width=4)
-
-        # fretboard dots (should be above heatmap, below strings)
-        self._draw_fret_dots()
-
-        # strings + string numbers (1 at top)
-        for gui_row in range(6):
-            y = top + gui_row * self.string_spacing
-            self.canvas.create_line(left, y, right, y, width=2)
-            self.canvas.create_text(left - 10, y, text=str(gui_row + 1), anchor="e", fill="gray")
-
-        # fret numbers along the bottom
-        footer_y = bottom + 12
-        for f in [0, 3, 5, 7, 9, 12, 15, 17, 19, 21, 24]:
-            if f <= self.num_frets:
-                x = left + f * self.fret_width + self.fret_width // 2
-                self.canvas.create_text(x, footer_y, text=str(f), fill="gray")
-
-    def _position_center(self, s: int, f: int) -> tuple[int, int]:
-        left, _, top, _ = self._board_bounds()
-        x = left + f * self.fret_width + self.fret_width // 2
-        y = top + (5 - s) * self.string_spacing
-        return x, y
-
-    def _draw_heatmap(self) -> None:
-        left, _, top, bottom = self._board_bounds()
-
-        for (s, f), fill in self._heatmap.items():
-            if f < 0 or f > self.num_frets:
+        # Fret dots (position markers)
+        dot_frets = {3, 5, 7, 9, 12, 15, 17, 19, 21, 24}
+        mid_y = (first_string_y + last_string_y) / 2.0
+        for f in dot_frets:
+            if f > layout.num_frets:
                 continue
-            if s < 0 or s > 5:
-                continue
+            cx = nut_x1 + (f - 0.5) * layout.fret_width
+            if f in {12, 24}:
+                cy1 = first_string_y + (last_string_y - first_string_y) * 0.35
+                cy2 = first_string_y + (last_string_y - first_string_y) * 0.65
+                self.canvas.create_oval(cx - 6, cy1 - 6, cx + 6, cy1 + 6, fill="gray", outline="")
+                self.canvas.create_oval(cx - 6, cy2 - 6, cx + 6, cy2 + 6, fill="gray", outline="")
+            else:
+                self.canvas.create_oval(cx - 6, mid_y - 6, cx + 6, mid_y + 6, fill="gray", outline="")
 
-            gui_row = 5 - s
-            x0 = left + f * self.fret_width
-            x1 = x0 + self.fret_width
-            y_center = top + gui_row * self.string_spacing
-            half = self.string_spacing // 2
+        # Strings + numbers
+        for gui_row in range(self.num_strings):
+            y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
+            if self.num_strings == 1:
+                width_px = 3
+            else:
+                width_px = 1 + int(4 * (gui_row / (self.num_strings - 1)))
+            self.canvas.create_line(left_x, y, right_x, y, width=width_px)
+            self.canvas.create_text(left_x - 12, y, text=str(gui_row + 1), anchor="e", font=("Arial", 10, "bold"))
 
-            self.canvas.create_rectangle(
-                x0,
-                max(top, y_center - half),
-                x1,
-                min(bottom, y_center + half),
-                fill=fill,
-                outline="",
-            )
-
-    def _draw_markers(self) -> None:
-        # many markers (Mode B)
+        # Cell markers (Mode B etc.) as rectangles (OK)
         for (s, f), outline in self._cell_markers.items():
-            if f < 0 or f > self.num_frets:
+            rect = position_to_rect(layout, s, f)
+            if rect is None:
                 continue
-            if s < 0 or s > 5:
-                continue
+            x0, y0, x1, y1 = rect
+            gui_row = (self.num_strings - 1) - s
+            y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
+            y0 = y - half_band
+            y1 = y + half_band
+            self.canvas.create_rectangle(x0, y0, x1, y1, outline=outline, width=3)
 
-            cx, cy = self._position_center(s, f)
-            r = max(5, self.string_spacing // 5)
-            self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline=outline, width=2)
-
-        # single highlight (Mode A)
-        if self._single_highlight:
+        # Single highlight as RED CIRCLE in the center of the cell
+        if self._single_highlight is not None:
             s, f = self._single_highlight
-            if 0 <= s <= 5 and 0 <= f <= self.num_frets:
-                cx, cy = self._position_center(s, f)
-                r = max(6, self.string_spacing // 4)
-                self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="black", width=2)
+            rect = position_to_rect(layout, s, f)
+            if rect is not None:
+                x0, y0, x1, y1 = rect
+                gui_row = (self.num_strings - 1) - s
+                y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
+                y0 = y - half_band
+                y1 = y + half_band
 
-    # ---------- input ----------
-
-    def _on_click(self, event: tk.Event) -> None:
-        pos = pixel_to_position(
-            event.x,
-            event.y,
-            num_frets=self.num_frets,
-            margin_x=self.margin_x,
-            margin_y=self.margin_y,
-            fret_width=self.fret_width,
-            string_spacing=self.string_spacing,
-        )
-        if pos is None:
-            return
-
-        s, f = pos
-        note = index_to_name(note_index_at(s, f, self.tuning))
-        self.status.config(text=f"String={s} Fret={f} Note={note}")
-
-        if self._click_callback:
-            self._click_callback(pos)
+                cx, cy = self._cell_center(x0, y0, x1, y1)
+                r = min((x1 - x0), (y1 - y0)) * 0.28
+                r = max(6, min(16, r))  # keep it usable
+                self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill="red", outline="red")
