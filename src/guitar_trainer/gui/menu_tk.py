@@ -18,9 +18,9 @@ class MenuFrame(ttk.Frame):
         self,
         master: tk.Misc,
         *,
-        stats_path_resolver: Callable[[int], str],
-        on_start: callable,    # callback(..., custom_tuning, plan_config)
-        on_heatmap: callable,  # callback(max_fret, num_strings)
+        stats_path_resolver: Callable[[int, str, list[int] | None], str],
+        on_start: callable,     # callback(..., custom_tuning, plan_config)
+        on_heatmap: callable,   # callback(max_fret)
     ) -> None:
         super().__init__(master)
 
@@ -45,8 +45,8 @@ class MenuFrame(ttk.Frame):
         self.plan_goal_window_var = tk.StringVar(value="120")
         self.plan_heat_thr_var = tk.StringVar(value="0.60")
 
-        # Stats file per instrument
-        self.stats_path = self.stats_path_resolver(self._get_num_strings())
+        # initial stats path based on current selection
+        self.stats_path = self._compute_stats_path()
         self.stats = load_stats(self.stats_path)
 
         # Layout
@@ -62,7 +62,7 @@ class MenuFrame(ttk.Frame):
         right.configure(padding=16)
 
         ttk.Label(left, text="Guitar Trainer", font=("Arial", 18, "bold")).pack(anchor="w")
-        ttk.Label(left, text="Progress is separate per instrument (6/7 strings).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 14))
+        ttk.Label(left, text="Progress is separate per instrument AND tuning.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 14))
 
         # Mode
         mode_box = ttk.Labelframe(left, text="Mode")
@@ -139,7 +139,7 @@ class MenuFrame(ttk.Frame):
         pr3 = prow("Heatmap threshold")
         self.plan_heat_thr_entry = ttk.Entry(pr3, textvariable=self.plan_heat_thr_var, width=8)
         self.plan_heat_thr_entry.pack(side="right")
-        ttk.Label(plan_box, text="0..1, where 1 = unseen/worst (same as heatmap scale).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
+        ttk.Label(plan_box, text="0..1, where 1 = unseen/worst (heatmap scale).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
 
         # Custom tuning
         custom_box = ttk.Labelframe(left, text="Custom tuning")
@@ -150,11 +150,12 @@ class MenuFrame(ttk.Frame):
         ttk.Label(custom_box, text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.", foreground="#9aa2b6").pack(anchor="w", pady=(6, 0))
 
         self.custom_box = custom_box
+        self._refresh_tuning_options()
         self._refresh_custom_visibility()
 
-        # Right actions + UX bonus label
+        # Right actions
         ttk.Label(right, text="Actions", font=("Arial", 14, "bold")).pack(anchor="w")
-        ttk.Label(right, text="Heatmap/stats are separate for 6 vs 7 strings.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 10))
+        ttk.Label(right, text="Heatmaps are stored per strings+tuning.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 10))
 
         self.active_stats_label = ttk.Label(right, text="", foreground="#9aa2b6")
         self.active_stats_label.pack(anchor="w", pady=(0, 14))
@@ -166,26 +167,21 @@ class MenuFrame(ttk.Frame):
         row1 = ttk.Frame(actions)
         row1.pack(fill="x", pady=(0, 10))
         ttk.Button(row1, text="▶ Start", command=self._start_clicked).pack(side="left", fill="x", expand=True, padx=(0, 10))
-        ttk.Button(row1, text="🔥 Heatmap", command=self._heatmap_clicked).pack(side="left", fill="x", expand=True)
+        ttk.Button(row1, text="🔥 Heatmap…", command=self._heatmap_clicked).pack(side="left", fill="x", expand=True)
 
         row2 = ttk.Frame(actions)
         row2.pack(fill="x", pady=(0, 10))
         ttk.Button(row2, text="📊 Show stats", command=self._show_stats_clicked).pack(side="left", fill="x", expand=True, padx=(0, 10))
-        ttk.Button(row2, text="🧹 Reset stats", command=self._reset_stats_clicked).pack(side="left", fill="x", expand=True)
+        ttk.Button(row2, text="🧹 Reset stats (this profile)", command=self._reset_stats_clicked).pack(side="left", fill="x", expand=True)
 
         ttk.Button(actions, text="✖ Quit", command=self._quit_clicked).pack(anchor="w", pady=(6, 0))
 
         # Bindings
-        self.num_strings_var.trace_add("write", lambda *_: self._on_num_strings_changed())
-        self.tuning_var.trace_add("write", lambda *_: self._refresh_custom_visibility())
+        self.num_strings_var.trace_add("write", lambda *_: self._on_settings_changed())
+        self.tuning_var.trace_add("write", lambda *_: self._on_settings_changed())
         self.mode_var.trace_add("write", lambda *_: self._refresh_plan_controls())
 
-        self._refresh_tuning_options()
-        self._refresh_custom_visibility()
         self._refresh_plan_controls()
-
-    def _update_active_stats_label(self) -> None:
-        self.active_stats_label.configure(text=f"Active stats file: {self.stats_path}")
 
     def _parse_int(self, value: str, *, min_value: int, max_value: int, field_name: str) -> int:
         v = int(value.strip())
@@ -205,22 +201,14 @@ class MenuFrame(ttk.Frame):
         except Exception:
             return DEFAULT_NUM_STRINGS
 
-    def _on_num_strings_changed(self) -> None:
-        n = self._get_num_strings()
-        self.stats_path = self.stats_path_resolver(n)
-        self.stats = load_stats(self.stats_path)
-        self._update_active_stats_label()
-        self._refresh_tuning_options()
-        self._refresh_custom_visibility()
-
     def _refresh_tuning_options(self) -> None:
         n = self._get_num_strings()
-        presets = get_tuning_presets(num_strings=n)  # dict[str, list[int]]
+        presets = get_tuning_presets(num_strings=n)
         values = list(presets.keys())
         if CUSTOM_TUNING_NAME not in values:
             values.append(CUSTOM_TUNING_NAME)
-
         self.tuning_combo.configure(values=values)
+
         cur = self.tuning_var.get()
         if cur not in values:
             self.tuning_var.set(get_default_tuning_name(n))
@@ -231,19 +219,43 @@ class MenuFrame(ttk.Frame):
         else:
             self.custom_box.pack_forget()
 
+    def _compute_custom_tuning(self) -> list[int] | None:
+        tuning_name = self.tuning_var.get().strip()
+        if tuning_name != CUSTOM_TUNING_NAME:
+            return None
+        num_strings = self._get_num_strings()
+        return parse_custom_tuning_text(self.custom_tuning_var.get(), num_strings=num_strings)
+
+    def _compute_stats_path(self) -> str:
+        num_strings = self._get_num_strings()
+        tuning_name = self.tuning_var.get().strip()
+        custom_tuning = None
+        if tuning_name == CUSTOM_TUNING_NAME:
+            try:
+                custom_tuning = self._compute_custom_tuning()
+            except Exception:
+                custom_tuning = None
+        return self.stats_path_resolver(num_strings, tuning_name, custom_tuning)
+
+    def _update_active_stats_label(self) -> None:
+        self.active_stats_label.configure(text=f"Active stats file: {self.stats_path}")
+
+    def _on_settings_changed(self) -> None:
+        # tuning options may depend on num_strings
+        self._refresh_tuning_options()
+        self._refresh_custom_visibility()
+
+        # update active stats file preview
+        self.stats_path = self._compute_stats_path()
+        self.stats = load_stats(self.stats_path)
+        self._update_active_stats_label()
+
     def _refresh_plan_controls(self) -> None:
         is_practice = (self.mode_var.get().strip().upper() == "PRACTICE")
-
-        # profile combobox
         self.plan_combo.configure(state=("readonly" if is_practice else "disabled"))
-
-        # ONLY these entries (avoid recursion; Combobox is a subclass of Entry)
         entry_state = ("normal" if is_practice else "disabled")
         for w in (self.plan_goal_acc_entry, self.plan_goal_window_entry, self.plan_heat_thr_entry):
-            try:
-                w.configure(state=entry_state)
-            except Exception:
-                pass
+            w.configure(state=entry_state)
 
     def _start_clicked(self) -> None:
         try:
@@ -297,7 +309,7 @@ class MenuFrame(ttk.Frame):
                         "strings_gui_to": num_strings,
                         "ramp_step_strings": 1,
                     }
-                else:  # weak heatmap
+                else:
                     plan_config = {
                         "profile": "WEAK_HEATMAP",
                         "goal_accuracy": goal_acc,
@@ -315,7 +327,7 @@ class MenuFrame(ttk.Frame):
             prefer_flats,
             num_strings,
             custom_tuning,
-            plan_config,  # <-- important
+            plan_config,
         )
 
     def _heatmap_clicked(self) -> None:
@@ -324,24 +336,17 @@ class MenuFrame(ttk.Frame):
         except ValueError as e:
             messagebox.showerror("Invalid settings", str(e))
             return
-        num_strings = self._get_num_strings()
-        self.on_heatmap(max_fret, num_strings)
+        self.on_heatmap(max_fret)
 
     def _show_stats_clicked(self) -> None:
         self.stats = load_stats(self.stats_path)
-        total_attempts = int(self.stats.total_attempts)
-        total_correct = int(self.stats.total_correct)
-        acc = (total_correct / total_attempts * 100.0) if total_attempts > 0 else 0.0
-        messagebox.showinfo(
-            "Stats",
-            f"Stats file: {self.stats_path}\n\nAttempts: {total_attempts}\nCorrect: {total_correct}\nAccuracy: {acc:.1f}%",
-        )
+        attempts = int(self.stats.total_attempts)
+        correct = int(self.stats.total_correct)
+        acc = (100.0 * correct / attempts) if attempts > 0 else 0.0
+        messagebox.showinfo("Stats", f"Stats file: {self.stats_path}\n\nAttempts: {attempts}\nCorrect: {correct}\nAccuracy: {acc:.1f}%")
 
     def _reset_stats_clicked(self) -> None:
-        if not messagebox.askyesno(
-            "Reset stats",
-            f"This will erase stats for this instrument:\n{self.stats_path}\n\nContinue?",
-        ):
+        if not messagebox.askyesno("Reset stats", f"This will erase stats for this profile:\n{self.stats_path}\n\nContinue?"):
             return
         self.stats = Stats()
         save_stats(self.stats_path, self.stats)
@@ -349,3 +354,4 @@ class MenuFrame(ttk.Frame):
 
     def _quit_clicked(self) -> None:
         self.winfo_toplevel().destroy()
+

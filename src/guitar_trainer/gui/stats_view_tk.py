@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 
 from guitar_trainer.core.stats import Stats
 from guitar_trainer.gui.fretboard import Fretboard
@@ -15,38 +16,58 @@ class StatsHeatmapFrame(tk.Frame):
         *,
         stats: Stats,
         max_fret: int,
-        num_strings: int,
         on_back=None,
+        title_suffix: str | None = None,
     ) -> None:
         super().__init__(master)
 
         self.stats = stats
-        self.max_fret = max_fret
-        self.num_strings = num_strings
+        self.max_fret = int(max_fret)
         self.on_back = on_back
 
-        header = tk.Frame(self)
-        header.pack(fill="x", pady=(0, 8))
-        tk.Label(header, text=f"Heatmap | {num_strings}-string | up to fret {max_fret}", font=("Arial", 13)).pack(side="left")
-        if self.on_back:
-            tk.Button(header, text="Back", command=self.on_back).pack(side="right")
+        meta = stats.meta or {}
+        num_strings = meta.get("num_strings", 6)
+        tuning_name = meta.get("tuning_name", "Unknown tuning")
+        stats_file = meta.get("stats_file", "")
 
-        # Use dummy tuning just for drawing string count:
-        tuning = [0] * num_strings
-        self.fretboard = Fretboard(self, num_frets=max_fret, tuning=tuning, enable_click_reporting=False)
+        attempts = int(stats.total_attempts)
+        correct = int(stats.total_correct)
+        acc = (100.0 * correct / attempts) if attempts > 0 else 0.0
+
+        header = ttk.Frame(self)
+        header.pack(fill="x", pady=(0, 8))
+
+        title = f"Heatmap | {num_strings}-string | {tuning_name} | up to fret {self.max_fret}"
+        if title_suffix:
+            title += f" | {title_suffix}"
+        ttk.Label(header, text=title, font=("Arial", 13)).pack(side="left")
+
+        if self.on_back:
+            ttk.Button(header, text="Back", command=self.on_back).pack(side="right")
+
+        info = ttk.Frame(self)
+        info.pack(fill="x", pady=(0, 6))
+        ttk.Label(info, text=f"Attempts: {attempts}   Accuracy: {acc:.1f}%", foreground="#9aa2b6").pack(side="left")
+        if stats_file:
+            ttk.Label(info, text=f"File: {stats_file}", foreground="#9aa2b6").pack(side="right")
+
+        # Use dummy tuning for drawing correct string count
+        tuning = [0] * int(num_strings)
+        self.fretboard = Fretboard(self, num_frets=self.max_fret, tuning=tuning, enable_click_reporting=False)
         self.fretboard.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self._apply_heatmap()
+        self._apply_heatmap(num_strings=int(num_strings))
 
-    def _apply_heatmap(self) -> None:
-        # value: 0..1 (1 = "bad" or "needs focus") -> we use 1-accuracy
+    def _apply_heatmap(self, *, num_strings: int) -> None:
         values: dict[tuple[int, int], float] = {}
-        for s in range(self.num_strings):
+
+        for s in range(num_strings):
             for f in range(self.max_fret + 1):
                 data = self.stats.by_position.get(_pos_key(s, f))
                 if not data:
                     values[(s, f)] = 1.0  # unseen -> highlight
                     continue
+
                 attempts = int(data.get("attempts", 0))
                 correct = int(data.get("correct", 0))
                 if attempts <= 0:

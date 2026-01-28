@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 
 def _pos_key(string_index: int, fret: int) -> str:
@@ -14,7 +14,6 @@ def _ensure_bucket(d: Dict[str, Dict[str, int]], key: str) -> Dict[str, int]:
         bucket = {"attempts": 0, "correct": 0}
         d[key] = bucket
     else:
-        # defensive for older/malformed data
         bucket.setdefault("attempts", 0)
         bucket.setdefault("correct", 0)
     return bucket
@@ -25,12 +24,15 @@ class Stats:
     total_attempts: int = 0
     total_correct: int = 0
 
-    # Required by tests
+    # required by tests
     by_mode: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
-    # Used across CLI + GUI
+    # used by CLI + GUI
     by_note: Dict[str, Dict[str, int]] = field(default_factory=dict)
     by_position: Dict[str, Dict[str, int]] = field(default_factory=dict)
+
+    # NEW: metadata for instrument/tuning separation
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def _record_mode(self, mode: str, correct: bool) -> None:
         mode = (mode or "A").strip().upper()
@@ -54,14 +56,7 @@ class Stats:
         note_name: str,
         string_index: Optional[int] = None,
     ) -> None:
-        """
-        Backwards-compatible API expected by CLI/tests.
-
-        IMPORTANT:
-        - We do NOT hardcode number of strings (no 0..5 limit).
-        - `string_index` is accepted for legacy calls but not validated against a fixed range.
-        """
-        # Defensive: ignore obviously invalid indices (don't crash GUI/CLI)
+        # Defensive: ignore obviously invalid indices (don't crash)
         if string_index is not None and int(string_index) < 0:
             return
 
@@ -73,7 +68,6 @@ class Stats:
         self._record_note(note_name, correct)
 
     def record_attempt_mode_b(self, *, correct: bool, note_name: str) -> None:
-        """Convenience wrapper expected by CLI/tests."""
         self.record_attempt(mode="B", correct=correct, note_name=note_name, string_index=None)
 
     def record_position_attempt(
@@ -85,21 +79,13 @@ class Stats:
         fret: int,
         mode: str = "A",
     ) -> None:
-        """
-        Used by GUI and tests.
-
-        By default counts toward mode "A" (as tests expect).
-        """
-        # Defensive: ignore bogus positions instead of crashing
         string_index = int(string_index)
         fret = int(fret)
         if string_index < 0 or fret < 0:
             return
 
-        # First, record overall + by_mode + by_note
         self.record_attempt(mode=mode, correct=correct, note_name=note_name, string_index=string_index)
 
-        # Then, record position bucket
         key = _pos_key(string_index, fret)
         bucket = _ensure_bucket(self.by_position, key)
         bucket["attempts"] += 1
@@ -120,12 +106,11 @@ def load_stats(path: str) -> Stats:
             by_mode=dict(raw.get("by_mode", {})),
             by_note=dict(raw.get("by_note", {})),
             by_position=dict(raw.get("by_position", {})),
+            meta=dict(raw.get("meta", {})),
         )
 
-        # ensure required modes exist (nice UX + stability)
         _ensure_bucket(stats.by_mode, "A")
         _ensure_bucket(stats.by_mode, "B")
-
         return stats
 
     except FileNotFoundError:
@@ -146,6 +131,7 @@ def save_stats(path: str, stats: Stats) -> None:
                 "by_mode": stats.by_mode,
                 "by_note": stats.by_note,
                 "by_position": stats.by_position,
+                "meta": stats.meta,
             },
             f,
             indent=2,
