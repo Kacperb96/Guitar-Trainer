@@ -4,59 +4,65 @@ import tkinter as tk
 from tkinter import ttk
 
 
-# Dark palette (simple, modern)
+# Dark palette
 BG = "#0f1115"
 PANEL = "#141824"
 PANEL_2 = "#10131b"
+CARD = "#141a28"
 TEXT = "#e7e9ee"
 MUTED = "#a9afbf"
 
 BORDER = "#242a3a"
-ACCENT = "#4c8dff"     # blue
-ACCENT_2 = "#ff4d6d"   # red/pink (reserved)
-OK = "#2ecc71"
-WARN = "#f39c12"
+ACCENT = "#4c8dff"
 ERR = "#e74c3c"
 
-# Better highlight colors for selection / hover
+# Interactive states
 HOVER_BG = "#1b2131"
-SELECT_BG = "#203a66"  # darker blue background for selected rows
+SELECT_BG = "#203a66"
 SELECT_FG = "#ffffff"
 
 
 def apply_theme(root: tk.Tk) -> None:
-    """
-    Applies a modern dark ttk theme.
-    Use ttk widgets to benefit most.
-    """
-    # Set default window background
+    """Applies a modern dark ttk theme."""
     root.configure(bg=BG)
 
     style = ttk.Style(root)
-
-    # Use a theme that allows styling (clam is usually best)
     try:
         style.theme_use("clam")
     except tk.TclError:
         pass
 
-    default_font = ("Segoe UI", 11)
-    heading_font = ("Segoe UI", 14, "bold")
-    small_font = ("Segoe UI", 10)
+    font_base = ("Segoe UI", 11)
+    font_small = ("Segoe UI", 10)
+    font_h1 = ("Segoe UI", 18, "bold")
+    font_h2 = ("Segoe UI", 13, "bold")
+    font_h3 = ("Segoe UI", 11, "bold")
+    font_mono = ("Consolas", 10)
 
-    style.configure(".", font=default_font)
+    style.configure(".", font=font_base)
 
-    # Frames / panels
+    # Frames
     style.configure("TFrame", background=BG)
     style.configure("Panel.TFrame", background=PANEL)
-    style.configure("Panel2.TFrame", background=PANEL_2)
+    style.configure("Card.TFrame", background=CARD, bordercolor=BORDER, relief="solid", borderwidth=1)
+    style.configure("CardInner.TFrame", background=CARD)
+    style.configure("Divider.TFrame", background=BORDER)
 
     # Labels
     style.configure("TLabel", background=BG, foreground=TEXT)
-    style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=small_font)
-    style.configure("Title.TLabel", background=BG, foreground=TEXT, font=heading_font)
+    style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=font_small)
+    style.configure("H1.TLabel", background=BG, foreground=TEXT, font=font_h1)
+    style.configure("H2.TLabel", background=BG, foreground=TEXT, font=font_h2)
+    style.configure("H3.TLabel", background=BG, foreground=TEXT, font=font_h3)
+    style.configure("Mono.TLabel", background=BG, foreground=MUTED, font=font_mono)
 
-    # Labelframe (default)
+    style.configure("Card.TLabel", background=CARD, foreground=TEXT)
+    style.configure("CardMuted.TLabel", background=CARD, foreground=MUTED, font=font_small)
+    style.configure("CardTitle.TLabel", background=CARD, foreground=TEXT, font=font_h2)
+    style.configure("CardSection.TLabel", background=CARD, foreground=TEXT, font=font_h3)
+    style.configure("CardMono.TLabel", background=CARD, foreground=MUTED, font=font_mono)
+
+    # Labelframe (kept for other screens)
     style.configure(
         "TLabelframe",
         background=BG,
@@ -65,23 +71,7 @@ def apply_theme(root: tk.Tk) -> None:
         relief="flat",
         borderwidth=1,
     )
-    style.configure("TLabelframe.Label", background=BG, foreground=TEXT, font=("Segoe UI", 11, "bold"))
-
-    # Labelframe variant for the left sidebar panels (no visible border)
-    style.configure(
-        "Side.TLabelframe",
-        background=PANEL,
-        foreground=TEXT,
-        bordercolor=PANEL,
-        relief="flat",
-        borderwidth=0,
-    )
-    style.configure(
-        "Side.TLabelframe.Label",
-        background=PANEL,
-        foreground=TEXT,
-        font=("Segoe UI", 11, "bold"),
-    )
+    style.configure("TLabelframe.Label", background=BG, foreground=TEXT, font=font_h3)
 
     # Entry
     style.configure(
@@ -118,7 +108,7 @@ def apply_theme(root: tk.Tk) -> None:
         background=PANEL,
         foreground=TEXT,
         bordercolor=BORDER,
-        padding=(12, 8),
+        padding=(12, 9),
         focusthickness=0,
         focuscolor=BORDER,
     )
@@ -129,7 +119,7 @@ def apply_theme(root: tk.Tk) -> None:
         bordercolor=[("active", "#2d3550")],
     )
 
-    # Primary button
+    # Primary
     style.configure(
         "Primary.TButton",
         background=ACCENT,
@@ -144,7 +134,7 @@ def apply_theme(root: tk.Tk) -> None:
         foreground=[("disabled", MUTED)],
     )
 
-    # Danger button
+    # Danger
     style.configure(
         "Danger.TButton",
         background=ERR,
@@ -158,32 +148,22 @@ def apply_theme(root: tk.Tk) -> None:
         foreground=[("disabled", MUTED)],
     )
 
-    # Radiobutton (improved readability)
-    # NOTE: With ttk + "clam", selection visuals are mostly controlled via style maps.
+    # Radiobutton (high contrast selection)
     style.configure(
         "TRadiobutton",
         background=BG,
         foreground=TEXT,
-        padding=(10, 6),   # a bit more "row-like"
-        indicatorcolor=ACCENT,  # supported in many Tk builds (safe if ignored)
+        padding=(10, 7),
+        indicatorcolor=ACCENT,
         indicatormargin=(0, 0, 8, 0),
         focuscolor=BORDER,
         focusthickness=0,
     )
     style.map(
         "TRadiobutton",
-        background=[
-            ("selected", SELECT_BG),
-            ("active", HOVER_BG),
-        ],
-        foreground=[
-            ("selected", SELECT_FG),
-            ("disabled", MUTED),
-        ],
-        indicatorcolor=[
-            ("selected", ACCENT),
-            ("active", ACCENT),
-        ],
+        background=[("selected", SELECT_BG), ("active", HOVER_BG)],
+        foreground=[("selected", SELECT_FG), ("disabled", MUTED)],
+        indicatorcolor=[("selected", ACCENT), ("active", ACCENT)],
     )
 
     # Checkbutton (if used)
@@ -191,7 +171,7 @@ def apply_theme(root: tk.Tk) -> None:
         "TCheckbutton",
         background=BG,
         foreground=TEXT,
-        padding=(10, 6),
+        padding=(10, 7),
         indicatorcolor=ACCENT,
     )
     style.map(
@@ -201,12 +181,17 @@ def apply_theme(root: tk.Tk) -> None:
         indicatorcolor=[("selected", ACCENT)],
     )
 
-    # Notebook (tabs) if used
-    style.configure("TNotebook", background=BG, bordercolor=BORDER)
-    style.configure("TNotebook.Tab", background=PANEL, foreground=TEXT, padding=(12, 8))
-    style.map("TNotebook.Tab", background=[("selected", PANEL_2)])
+    # Progressbar (for stats)
+    style.configure(
+        "TProgressbar",
+        background=ACCENT,
+        troughcolor=PANEL,
+        bordercolor=BORDER,
+        lightcolor=BORDER,
+        darkcolor=BORDER,
+    )
 
-    # Make message boxes less jarring by setting tk option db colors
+    # Tk option DB (helps non-ttk widgets)
     root.option_add("*Background", BG)
     root.option_add("*Foreground", TEXT)
     root.option_add("*insertBackground", TEXT)
