@@ -1,9 +1,7 @@
 import re
 import tkinter as tk
-from tkinter import messagebox
-import logging
-from pathlib import Path
 
+from guitar_trainer.gui.dpi import apply_tk_scaling, configure_windows_dpi_awareness
 from guitar_trainer.gui.theme import apply_theme
 from guitar_trainer.core.stats import load_stats
 from guitar_trainer.core.tuning import get_tuning_by_name
@@ -37,64 +35,14 @@ def stats_path_for(num_strings: int, tuning_name: str, custom_tuning: list[int] 
     return f"stats_{int(num_strings)}__{slug}.json"
 
 
-def _install_global_exception_handler(root: tk.Tk) -> str:
-    """Global safety net for Tk callbacks.
-
-    Any unhandled exception inside a Tkinter event/callback is caught here:
-    - full traceback is written to a log file
-    - user gets a friendly error dialog
-    The app continues running.
-    """
-    log_dir = Path.home() / ".guitar_trainer"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "guitar_trainer.log"
-
-    logger = logging.getLogger("guitar_trainer")
-    logger.setLevel(logging.INFO)
-
-    # Avoid duplicate handlers if run_gui() is called multiple times in one process.
-    if not any(
-        isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", None) == str(log_path)
-        for h in logger.handlers
-    ):
-        fh = logging.FileHandler(log_path, encoding="utf-8")
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(
-            logging.Formatter(
-                fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-        logger.addHandler(fh)
-
-    def report_callback_exception(exc, val, tb) -> None:
-        try:
-            logger.error("Unhandled exception in Tk callback", exc_info=(exc, val, tb))
-            short = f"{exc.__name__}: {val}"
-            try:
-                messagebox.showerror(
-                    "Application Error",
-                    "An unexpected error occurred.\n\n"
-                    f"Details were saved to:\n{log_path}\n\n"
-                    f"{short}\n\n"
-                    "The app will keep running, but if something is broken, please restart it.",
-                    parent=root,
-                )
-            except Exception:
-                # If the message box fails (rare), do not crash the app.
-                pass
-        except Exception:
-            # Last resort: never raise from the exception hook.
-            pass
-
-    root.report_callback_exception = report_callback_exception  # type: ignore[attr-defined]
-    return str(log_path)
-
-
 def run_gui() -> None:
+    # IMPORTANT: must be called before Tk() on Windows
+    configure_windows_dpi_awareness()
+
     root = tk.Tk()
 
-    _install_global_exception_handler(root)
+    # IMPORTANT: apply scaling as early as possible (before building UI)
+    apply_tk_scaling(root)
 
     # Start maximized (windowed). Fullscreen is toggleable via F11.
     try:
@@ -135,7 +83,7 @@ def run_gui() -> None:
         clear_root()
         stats = load_stats(stats_path)
 
-        # Store file path in meta for display/debugging.
+        # store file path in meta for display
         stats.meta = dict(stats.meta or {})
         stats.meta["stats_file"] = stats_path
 
@@ -164,7 +112,7 @@ def run_gui() -> None:
             root,
             stats_path_resolver=lambda n, tname, ct: stats_path_for(n, tname, ct),
             on_start=start_mode,
-            on_heatmap=show_heatmap_picker,
+            on_heatmap=show_heatmap_picker,  # <-- picker now
         )
         menu.pack(fill="both", expand=True, padx=16, pady=16)
 
@@ -231,7 +179,7 @@ def run_gui() -> None:
             tuning = get_tuning_by_name(num_strings, tuning_name)
             shown_name = tuning_name
 
-        # Attach metadata so the file identifies tuning/instrument.
+        # attach metadata so the file identifies tuning/instrument
         stats.meta = dict(stats.meta or {})
         stats.meta["num_strings"] = int(num_strings)
         stats.meta["tuning_name"] = str(tuning_name)

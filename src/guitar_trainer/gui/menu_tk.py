@@ -91,14 +91,44 @@ class MenuFrame(ttk.Frame):
         # Main content grid
         content = ttk.Frame(root)
         content.grid(row=1, column=0, sticky="nsew")
-        content.columnconfigure(0, weight=0)  # left stack (fixed-ish)
+        content.columnconfigure(0, weight=0)  # left stack (scrollable)
         content.columnconfigure(1, weight=1)  # right stack (fills)
         content.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(content)
-        left.grid(row=0, column=0, sticky="ns", padx=(0, 14))
-        left.columnconfigure(0, weight=1)
+        # -----------------------
+        # LEFT: scrollable column
+        # -----------------------
+        left_outer = ttk.Frame(content)
+        left_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        left_outer.rowconfigure(0, weight=1)
+        left_outer.columnconfigure(0, weight=1)
 
+        self._left_canvas = tk.Canvas(left_outer, highlightthickness=0, bd=0)
+        self._left_canvas.grid(row=0, column=0, sticky="nsew")
+
+        self._left_scrollbar = ttk.Scrollbar(left_outer, orient="vertical", command=self._left_canvas.yview)
+        self._left_scrollbar.grid(row=0, column=1, sticky="ns")
+
+        self._left_canvas.configure(yscrollcommand=self._left_scrollbar.set)
+
+        # The scrollable content frame (where cards live)
+        self._left_inner = ttk.Frame(left_outer)
+        self._left_inner.columnconfigure(0, weight=1)
+
+        self._left_window_id = self._left_canvas.create_window(
+            (0, 0), window=self._left_inner, anchor="nw"
+        )
+
+        # Keep scrollregion updated
+        self._left_inner.bind("<Configure>", self._on_left_inner_configure)
+        self._left_canvas.bind("<Configure>", self._on_left_canvas_configure)
+
+        # Mouse wheel scrolling on the left column only
+        self._bind_mousewheel(self._left_canvas)
+
+        # -----------------------
+        # RIGHT: normal column
+        # -----------------------
         right = ttk.Frame(content)
         right.grid(row=0, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
@@ -108,7 +138,7 @@ class MenuFrame(ttk.Frame):
         # -----------------------
         # Cards (LEFT)
         # -----------------------
-        mode_outer, mode_inner = self._card(left, title="Mode", subtitle="Choose how you want to practice.")
+        mode_outer, mode_inner = self._card(self._left_inner, title="Mode", subtitle="Choose how you want to practice.")
         mode_outer.grid(row=0, column=0, sticky="ew", pady=(0, 12))
 
         self._radio(mode_inner, "Mode A — Guess the note", "A").pack(anchor="w", pady=3)
@@ -116,15 +146,15 @@ class MenuFrame(ttk.Frame):
         self._radio(mode_inner, "Adaptive (Mode A)", "ADAPT").pack(anchor="w", pady=3)
         self._radio(mode_inner, "Practice Session (timed)", "PRACTICE").pack(anchor="w", pady=3)
 
-        settings_outer, settings_inner = self._card(left, title="Settings", subtitle="Instrument, tuning and limits.")
+        settings_outer, settings_inner = self._card(self._left_inner, title="Settings", subtitle="Instrument, tuning and limits.")
         settings_outer.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         self._build_settings_form(settings_inner)
 
-        plan_outer, plan_inner = self._card(left, title="Training plan", subtitle="Optional guidance for Practice mode.")
+        plan_outer, plan_inner = self._card(self._left_inner, title="Training plan", subtitle="Optional guidance for Practice mode.")
         plan_outer.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         self._build_plan_form(plan_inner)
 
-        custom_outer, custom_inner = self._card(left, title="Custom tuning", subtitle="Lowest → Highest (e.g., E A D G B E).")
+        custom_outer, custom_inner = self._card(self._left_inner, title="Custom tuning", subtitle="Lowest → Highest (e.g., E A D G B E).")
         custom_outer.grid(row=3, column=0, sticky="ew")
         self.custom_outer = custom_outer
         self._build_custom_tuning(custom_inner)
@@ -153,6 +183,58 @@ class MenuFrame(ttk.Frame):
         self._refresh_custom_visibility()
         self._update_profile_header()
         self._update_profile_summary()
+
+    # -----------------------
+    # Scroll helpers (LEFT column)
+    # -----------------------
+    def _on_left_inner_configure(self, _event=None) -> None:
+        # Update the scrollregion to encompass the inner frame
+        try:
+            self._left_canvas.configure(scrollregion=self._left_canvas.bbox("all"))
+        except Exception:
+            return
+
+    def _on_left_canvas_configure(self, event) -> None:
+        # Make the inner window match the canvas width (so cards fill the column)
+        try:
+            self._left_canvas.itemconfigure(self._left_window_id, width=event.width)
+        except Exception:
+            return
+
+    def _bind_mousewheel(self, widget: tk.Widget) -> None:
+        # Windows / macOS use <MouseWheel>, Linux typically uses Button-4/5
+        widget.bind("<Enter>", lambda e: self._set_mousewheel_target(True), add="+")
+        widget.bind("<Leave>", lambda e: self._set_mousewheel_target(False), add="+")
+
+    def _set_mousewheel_target(self, active: bool) -> None:
+        if active:
+            self.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
+            self.bind_all("<Button-4>", self._on_mousewheel_linux, add="+")
+            self.bind_all("<Button-5>", self._on_mousewheel_linux, add="+")
+        else:
+            try:
+                self.unbind_all("<MouseWheel>")
+                self.unbind_all("<Button-4>")
+                self.unbind_all("<Button-5>")
+            except Exception:
+                pass
+
+    def _on_mousewheel(self, event) -> None:
+        # Windows: event.delta is typically multiples of 120
+        try:
+            delta = int(-1 * (event.delta / 120))
+            self._left_canvas.yview_scroll(delta, "units")
+        except Exception:
+            return
+
+    def _on_mousewheel_linux(self, event) -> None:
+        try:
+            if event.num == 4:
+                self._left_canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self._left_canvas.yview_scroll(1, "units")
+        except Exception:
+            return
 
     # -----------------------
     # UI helpers
@@ -204,7 +286,9 @@ class MenuFrame(ttk.Frame):
         self.tuning_combo.grid(row=0, column=1, sticky="e")
 
         r2 = self._form_row(parent, "Display")
-        self.display_combo = ttk.Combobox(r2, textvariable=self.display_var, values=["Sharps", "Flats"], width=10, state="readonly")
+        self.display_combo = ttk.Combobox(
+            r2, textvariable=self.display_var, values=["Sharps", "Flats"], width=10, state="readonly"
+        )
         self.display_combo.grid(row=0, column=1, sticky="e")
 
         r3 = self._form_row(parent, "Questions")
