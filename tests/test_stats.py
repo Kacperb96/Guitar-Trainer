@@ -17,7 +17,6 @@ def test_record_attempt_and_position():
     assert stats.by_note["E"]["attempts"] == 2
     assert stats.by_note["E"]["correct"] == 1
 
-    assert stats.by_string["0"]["attempts"] == 2
     assert stats.by_position["0,0"]["attempts"] == 2
     assert stats.by_position["0,0"]["correct"] == 1
 

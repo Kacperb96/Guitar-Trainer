@@ -1,12 +1,23 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import Dict, Optional
 
 
-def _empty_bucket() -> dict[str, int]:
-    return {"attempts": 0, "correct": 0}
+def _pos_key(string_index: int, fret: int) -> str:
+    return f"{string_index},{fret}"
+
+
+def _ensure_bucket(d: Dict[str, Dict[str, int]], key: str) -> Dict[str, int]:
+    bucket = d.get(key)
+    if bucket is None:
+        bucket = {"attempts": 0, "correct": 0}
+        d[key] = bucket
+    else:
+        # defensive for older/malformed data
+        bucket.setdefault("attempts", 0)
+        bucket.setdefault("correct", 0)
+    return bucket
 
 
 @dataclass
@@ -14,14 +25,26 @@ class Stats:
     total_attempts: int = 0
     total_correct: int = 0
 
-    by_mode: dict[str, dict[str, int]] = field(default_factory=dict)
-    by_note: dict[str, dict[str, int]] = field(default_factory=dict)
-    by_string: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Required by tests
+    by_mode: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
-    # NEW: per-position statistics for heatmap (key: "string,fret")
-    by_position: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Used across CLI + GUI
+    by_note: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    by_position: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
-    # -------- recording --------
+    def _record_mode(self, mode: str, correct: bool) -> None:
+        mode = (mode or "A").strip().upper()
+        bucket = _ensure_bucket(self.by_mode, mode)
+        bucket["attempts"] += 1
+        if correct:
+            bucket["correct"] += 1
+
+    def _record_note(self, note_name: str, correct: bool) -> None:
+        note_name = str(note_name)
+        bucket = _ensure_bucket(self.by_note, note_name)
+        bucket["attempts"] += 1
+        if correct:
+            bucket["correct"] += 1
 
     def record_attempt(
         self,
@@ -29,20 +52,29 @@ class Stats:
         mode: str,
         correct: bool,
         note_name: str,
-        string_index: int,
+        string_index: Optional[int] = None,
     ) -> None:
-        if mode not in {"A", "B"}:
-            raise ValueError("mode must be 'A' or 'B'")
-        if string_index < 0 or string_index > 5:
-            raise ValueError("string_index must be between 0 and 5")
+        """
+        Backwards-compatible API expected by CLI/tests.
+
+        IMPORTANT:
+        - We do NOT hardcode number of strings (no 0..5 limit).
+        - `string_index` is accepted for legacy calls but not validated against a fixed range.
+        """
+        # Defensive: ignore obviously invalid indices (don't crash GUI/CLI)
+        if string_index is not None and int(string_index) < 0:
+            return
 
         self.total_attempts += 1
         if correct:
             self.total_correct += 1
 
-        self._record_bucket(self.by_mode, mode, correct)
-        self._record_bucket(self.by_note, note_name, correct)
-        self._record_bucket(self.by_string, str(string_index), correct)
+        self._record_mode(mode, correct)
+        self._record_note(note_name, correct)
+
+    def record_attempt_mode_b(self, *, correct: bool, note_name: str) -> None:
+        """Convenience wrapper expected by CLI/tests."""
+        self.record_attempt(mode="B", correct=correct, note_name=note_name, string_index=None)
 
     def record_position_attempt(
         self,
@@ -51,124 +83,70 @@ class Stats:
         note_name: str,
         string_index: int,
         fret: int,
+        mode: str = "A",
     ) -> None:
         """
-        Mode A helper: record stats per (string,fret) position for heatmap.
+        Used by GUI and tests.
+
+        By default counts toward mode "A" (as tests expect).
         """
-        if fret < 0:
-            raise ValueError("fret must be >= 0")
-        # this records totals + by_mode/by_note/by_string
-        self.record_attempt(
-            mode="A",
-            correct=correct,
-            note_name=note_name,
-            string_index=string_index,
-        )
-        key = f"{string_index},{fret}"
-        self._record_bucket(self.by_position, key, correct)
+        # Defensive: ignore bogus positions instead of crashing
+        string_index = int(string_index)
+        fret = int(fret)
+        if string_index < 0 or fret < 0:
+            return
 
-    def record_attempt_mode_b(
-        self,
-        *,
-        correct: bool,
-        note_name: str,
-    ) -> None:
-        self.total_attempts += 1
+        # First, record overall + by_mode + by_note
+        self.record_attempt(mode=mode, correct=correct, note_name=note_name, string_index=string_index)
+
+        # Then, record position bucket
+        key = _pos_key(string_index, fret)
+        bucket = _ensure_bucket(self.by_position, key)
+        bucket["attempts"] += 1
         if correct:
-            self.total_correct += 1
+            bucket["correct"] += 1
 
-        self._record_bucket(self.by_mode, "B", correct)
-        self._record_bucket(self.by_note, note_name, correct)
-
-    # -------- helpers --------
-
-    @staticmethod
-    def _record_bucket(
-        bucket: dict[str, dict[str, int]],
-        key: str,
-        correct: bool,
-    ) -> None:
-        if key not in bucket:
-            bucket[key] = _empty_bucket()
-
-        bucket[key]["attempts"] += 1
-        if correct:
-            bucket[key]["correct"] += 1
-
-    # -------- serialization --------
-
-    def to_dict(self) -> dict:
-        return {
-            "total_attempts": self.total_attempts,
-            "total_correct": self.total_correct,
-            "by_mode": self.by_mode,
-            "by_note": self.by_note,
-            "by_string": self.by_string,
-            "by_position": self.by_position,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Stats":
-        return cls(
-            total_attempts=data.get("total_attempts", 0),
-            total_correct=data.get("total_correct", 0),
-            by_mode=data.get("by_mode", {}),
-            by_note=data.get("by_note", {}),
-            by_string=data.get("by_string", {}),
-            by_position=data.get("by_position", {}),
-        )
-
-    # -------- presentation --------
-
-    def summary(self) -> str:
-        lines: list[str] = []
-
-        if self.total_attempts == 0:
-            return "No statistics yet."
-
-        accuracy = 100 * self.total_correct / self.total_attempts
-        lines.append(
-            f"Total: {self.total_attempts} attempts, "
-            f"{self.total_correct} correct ({accuracy:.1f}%)"
-        )
-
-        for mode, data in self.by_mode.items():
-            if data["attempts"] == 0:
-                continue
-            acc = 100 * data["correct"] / data["attempts"]
-            lines.append(
-                f"Mode {mode}: {data['attempts']} "
-                f"({data['correct']} correct, {acc:.1f}%)"
-            )
-
-        lines.append("\nNotes (most practiced):")
-        for note, data in sorted(
-            self.by_note.items(),
-            key=lambda x: x[1]["attempts"],
-            reverse=True,
-        )[:5]:
-            acc = 100 * data["correct"] / data["attempts"]
-            lines.append(f"  {note}: {data['attempts']} attempts ({acc:.1f}%)")
-
-        lines.append("")
-        lines.append(f"Heatmap data points (positions): {len(self.by_position)}")
-
-        return "\n".join(lines)
-
-
-# -------- file IO --------
 
 def load_stats(path: str) -> Stats:
-    p = Path(path)
-    if not p.exists():
-        return Stats()
+    import json
 
-    with p.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    return Stats.from_dict(data)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+
+        stats = Stats(
+            total_attempts=int(raw.get("total_attempts", 0)),
+            total_correct=int(raw.get("total_correct", 0)),
+            by_mode=dict(raw.get("by_mode", {})),
+            by_note=dict(raw.get("by_note", {})),
+            by_position=dict(raw.get("by_position", {})),
+        )
+
+        # ensure required modes exist (nice UX + stability)
+        _ensure_bucket(stats.by_mode, "A")
+        _ensure_bucket(stats.by_mode, "B")
+
+        return stats
+
+    except FileNotFoundError:
+        s = Stats()
+        _ensure_bucket(s.by_mode, "A")
+        _ensure_bucket(s.by_mode, "B")
+        return s
 
 
 def save_stats(path: str, stats: Stats) -> None:
-    p = Path(path)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(stats.to_dict(), f, indent=2, sort_keys=True)
+    import json
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "total_attempts": int(stats.total_attempts),
+                "total_correct": int(stats.total_correct),
+                "by_mode": stats.by_mode,
+                "by_note": stats.by_note,
+                "by_position": stats.by_position,
+            },
+            f,
+            indent=2,
+        )

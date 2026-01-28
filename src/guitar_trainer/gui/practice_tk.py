@@ -3,7 +3,9 @@ from __future__ import annotations
 import random
 import time
 import tkinter as tk
-from typing import List, Tuple, Optional, Set
+from collections import deque
+from dataclasses import dataclass
+from typing import Deque, List, Optional, Set, Tuple
 
 from guitar_trainer.core.adaptive import choose_adaptive_position
 from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
@@ -35,6 +37,128 @@ def _rank_weak_items(items: List[Tuple[str, int, float | None]], top_n: int = 3)
     return sorted(items, key=key_fn)[:top_n]
 
 
+# ----------------------------
+# Training plan
+# ----------------------------
+@dataclass
+class TrainingPlanConfig:
+    profile: str  # "FRETS_1_5" | "WEAK_HEATMAP" | "STRINGS_3_6"
+    goal_accuracy: float = 0.80
+    goal_window_sec: int = 120
+
+    # profile params:
+    start_fret: int = 1
+    end_fret: int = 5
+    heat_threshold: float = 0.60  # "badness" in [0..1], where 1=unseen/worst (same as heatmap: 1-accuracy)
+    strings_gui_from: int = 3  # GUI numbering: 1 is top (thinnest)
+    strings_gui_to: int = 6
+
+    # ramp params:
+    ramp_step_frets: int = 2
+    ramp_step_strings: int = 1
+    ramp_step_threshold: float = 0.10
+
+
+class TrainingPlanState:
+    def __init__(self, cfg: TrainingPlanConfig, *, max_fret: int, num_strings: int) -> None:
+        self.cfg = cfg
+        self.max_fret = max_fret
+        self.num_strings = num_strings
+
+        # dynamic state
+        self.current_end_fret = min(max_fret, max(cfg.end_fret, cfg.start_fret))
+        self.current_strings_gui_from = max(1, min(cfg.strings_gui_from, num_strings))
+        self.current_strings_gui_to = max(1, min(cfg.strings_gui_to, num_strings))
+        if self.current_strings_gui_from > self.current_strings_gui_to:
+            self.current_strings_gui_from, self.current_strings_gui_to = self.current_strings_gui_to, self.current_strings_gui_from
+
+        self.current_heat_threshold = float(cfg.heat_threshold)
+        self.last_level_up_time = time.monotonic()
+
+    def describe(self) -> str:
+        if self.cfg.profile == "FRETS_1_5":
+            return f"Plan: Frets {self.cfg.start_fret}–{self.current_end_fret}"
+        if self.cfg.profile == "STRINGS_3_6":
+            return f"Plan: Strings {self.current_strings_gui_from}–{self.current_strings_gui_to}"
+        if self.cfg.profile == "WEAK_HEATMAP":
+            return f"Plan: Weak spots (heatmap ≥ {self.current_heat_threshold:.2f})"
+        return "Plan: None"
+
+    def constraints(self, stats: Stats) -> tuple[Optional[Set[int]], Optional[Set[int]], Optional[Set[Position]]]:
+        # returns (allowed_strings_core, allowed_frets, allowed_positions)
+        if self.cfg.profile == "FRETS_1_5":
+            start = max(0, self.cfg.start_fret)
+            end = max(start, self.current_end_fret)
+            frets = {f for f in range(start, min(self.max_fret, end) + 1)}
+            return None, frets, None
+
+        if self.cfg.profile == "STRINGS_3_6":
+            # Convert GUI numbering (1=top) to core indices (0=bottom):
+            gui_from = self.current_strings_gui_from
+            gui_to = self.current_strings_gui_to
+            core_set: Set[int] = set()
+            for gui_n in range(gui_from, gui_to + 1):
+                core_idx = self.num_strings - gui_n
+                if 0 <= core_idx < self.num_strings:
+                    core_set.add(core_idx)
+            return core_set or None, None, None
+
+        if self.cfg.profile == "WEAK_HEATMAP":
+            # Use arbitrary positions set (precise).
+            pos: Set[Position] = set()
+            thr = max(0.0, min(1.0, self.current_heat_threshold))
+            for s in range(self.num_strings):
+                for f in range(self.max_fret + 1):
+                    attempts, correct = _get_attempts_correct(stats, s, f)
+                    if attempts <= 0:
+                        bad = 1.0
+                    else:
+                        acc = correct / attempts
+                        bad = 1.0 - acc
+                    if bad >= thr:
+                        pos.add((s, f))
+            return None, None, pos or None
+
+        return None, None, None
+
+    def maybe_level_up(self) -> bool:
+        """
+        Apply ramp (broaden difficulty). Returns True if something changed.
+        """
+        changed = False
+        if self.cfg.profile == "FRETS_1_5":
+            if self.current_end_fret < self.max_fret:
+                self.current_end_fret = min(self.max_fret, self.current_end_fret + max(1, self.cfg.ramp_step_frets))
+                changed = True
+
+        elif self.cfg.profile == "STRINGS_3_6":
+            # expand toward string 1 (thinnest) first
+            if self.current_strings_gui_from > 1:
+                self.current_strings_gui_from = max(1, self.current_strings_gui_from - max(1, self.cfg.ramp_step_strings))
+                changed = True
+            elif self.current_strings_gui_to < self.num_strings:
+                self.current_strings_gui_to = min(self.num_strings, self.current_strings_gui_to + max(1, self.cfg.ramp_step_strings))
+                changed = True
+
+        elif self.cfg.profile == "WEAK_HEATMAP":
+            if self.current_heat_threshold > 0.0:
+                self.current_heat_threshold = max(0.0, self.current_heat_threshold - max(0.01, self.cfg.ramp_step_threshold))
+                changed = True
+
+        if changed:
+            self.last_level_up_time = time.monotonic()
+        return changed
+
+
+def _position_weight(stats: Stats, s: int, f: int) -> float:
+    attempts, correct = _get_attempts_correct(stats, s, f)
+    if attempts <= 0:
+        return 5.0
+    acc = correct / attempts
+    bad = 1.0 - acc
+    return 1.0 + bad * 4.0 + (1.0 / (attempts + 1)) * 2.0
+
+
 class PracticeSessionFrame(tk.Frame):
     def __init__(
         self,
@@ -50,6 +174,7 @@ class PracticeSessionFrame(tk.Frame):
         rng_seed: int | None = None,
         allowed_strings: Optional[Set[int]] = None,
         allowed_frets: Optional[Set[int]] = None,
+        training_plan: Optional[dict] = None,
         on_back=None,
         on_finish=None,
     ) -> None:
@@ -85,6 +210,21 @@ class PracticeSessionFrame(tk.Frame):
             self.allowed_frets = {f for f in self.allowed_frets if 0 <= f <= max_fret}
             if not self.allowed_frets:
                 self.allowed_frets = None
+
+        # Training plan (optional)
+        self.plan_cfg: TrainingPlanConfig | None = None
+        self.plan_state: TrainingPlanState | None = None
+        if training_plan:
+            try:
+                self.plan_cfg = TrainingPlanConfig(**training_plan)
+                self.plan_state = TrainingPlanState(self.plan_cfg, max_fret=self.max_fret, num_strings=self.num_strings)
+            except Exception:
+                self.plan_cfg = None
+                self.plan_state = None
+
+        # Rolling window for goal checking
+        self._recent: Deque[tuple[float, bool]] = deque()
+        self._last_levelup_msg_until = 0.0
 
         self.rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
 
@@ -129,6 +269,9 @@ class PracticeSessionFrame(tk.Frame):
         self.time_left_label.pack(side="left")
         self.score_label = tk.Label(info, text="")
         self.score_label.pack(side="right")
+
+        self.plan_label = tk.Label(info, text="", fg="#9aa2b6")
+        self.plan_label.pack(side="left", padx=(14, 0))
 
         self.fretboard = Fretboard(self, num_frets=max_fret, tuning=self.tuning, enable_click_reporting=False)
         self.fretboard.pack(fill="both", expand=True, padx=10, pady=10)
@@ -180,27 +323,96 @@ class PracticeSessionFrame(tk.Frame):
         s = seconds % 60
         return f"{m:02d}:{s:02d}"
 
+    def _window_stats(self) -> tuple[float, int, int]:
+        if not self.plan_cfg:
+            return 0.0, 0, 0
+        now = time.monotonic()
+        cutoff = now - self.plan_cfg.goal_window_sec
+        while self._recent and self._recent[0][0] < cutoff:
+            self._recent.popleft()
+        total = len(self._recent)
+        correct = sum(1 for _t, ok in self._recent if ok)
+        acc = (correct / total) if total > 0 else 0.0
+        return acc, correct, total
+
+    def _maybe_level_up(self) -> None:
+        if not (self.plan_cfg and self.plan_state):
+            return
+        acc, _c, n = self._window_stats()
+        if n < 10:
+            return
+        if acc >= self.plan_cfg.goal_accuracy:
+            if self.plan_state.maybe_level_up():
+                self._recent.clear()
+                self._last_levelup_msg_until = time.monotonic() + 2.5
+                self.feedback.config(text=f"⬆️ Level up! {self.plan_state.describe()}")
+
     def _update_ui_labels(self) -> None:
         remaining = max(0, int(self.end_time - time.monotonic()))
         self.time_left_label.config(text=f"Time left: {self._format_time(remaining)}")
         self.score_label.config(text=f"Correct: {self.correct}/{self.total}")
 
+        if self.plan_state and self.plan_cfg:
+            acc, _c, n = self._window_stats()
+            goal = int(self.plan_cfg.goal_accuracy * 100)
+            cur = int(acc * 100)
+            self.plan_label.config(text=f"{self.plan_state.describe()} | Goal: {cur}%/{goal}% ({n})")
+        else:
+            self.plan_label.config(text="")
+
+    def _merged_constraints(self) -> tuple[Optional[Set[int]], Optional[Set[int]], Optional[Set[Position]]]:
+        plan_strings, plan_frets, plan_positions = (None, None, None)
+        if self.plan_state:
+            plan_strings, plan_frets, plan_positions = self.plan_state.constraints(self.stats)
+
+        strings = None
+        if self.allowed_strings is not None or plan_strings is not None:
+            base = set(range(self.num_strings))
+            if self.allowed_strings is not None:
+                base &= set(self.allowed_strings)
+            if plan_strings is not None:
+                base &= set(plan_strings)
+            strings = base or None
+
+        frets = None
+        if self.allowed_frets is not None or plan_frets is not None:
+            base = set(range(self.max_fret + 1))
+            if self.allowed_frets is not None:
+                base &= set(self.allowed_frets)
+            if plan_frets is not None:
+                base &= set(plan_frets)
+            frets = base or None
+
+        positions = plan_positions
+        return strings, frets, positions
+
     def pick_next_position(self) -> Position:
-        if self.allowed_strings is None and self.allowed_frets is None:
+        strings, frets, positions = self._merged_constraints()
+
+        if positions:
+            candidates = [(s, f) for (s, f) in positions if 0 <= s < self.num_strings and 0 <= f <= self.max_fret]
+            if strings is not None:
+                candidates = [(s, f) for (s, f) in candidates if s in strings]
+            if frets is not None:
+                candidates = [(s, f) for (s, f) in candidates if f in frets]
+            if candidates:
+                weights = [_position_weight(self.stats, s, f) for (s, f) in candidates]
+                return self.rng.choices(candidates, weights=weights, k=1)[0]
+
+        if strings is None and frets is None:
             return choose_adaptive_position(self.stats, self.max_fret, self.rng, num_strings=self.num_strings)
 
-        for _ in range(200):
+        for _ in range(300):
             s, f = choose_adaptive_position(self.stats, self.max_fret, self.rng, num_strings=self.num_strings)
-            if self.allowed_strings is not None and s not in self.allowed_strings:
+            if strings is not None and s not in strings:
                 continue
-            if self.allowed_frets is not None and f not in self.allowed_frets:
+            if frets is not None and f not in frets:
                 continue
             return (s, f)
 
-        # fallback
-        strings = self.allowed_strings if self.allowed_strings is not None else set(range(self.num_strings))
-        frets = self.allowed_frets if self.allowed_frets is not None else set(range(self.max_fret + 1))
-        candidates = [(s, f) for s in strings for f in frets]
+        strings2 = strings if strings is not None else set(range(self.num_strings))
+        frets2 = frets if frets is not None else set(range(self.max_fret + 1))
+        candidates = [(s, f) for s in strings2 for f in frets2]
         return self.rng.choice(candidates) if candidates else (0, 0)
 
     def next_question(self) -> None:
@@ -216,7 +428,8 @@ class PracticeSessionFrame(tk.Frame):
         )
 
         self.fretboard.highlight_position(self.current_position)
-        self.feedback.config(text="")
+        if time.monotonic() > self._last_levelup_msg_until:
+            self.feedback.config(text="")
         self.answer_var.set("")
         self.answer_entry.focus_set()
         self.question_start_time = time.monotonic()
@@ -241,6 +454,10 @@ class PracticeSessionFrame(tk.Frame):
         s, f = self.current_position
         self.stats.record_position_attempt(correct=is_correct, note_name=self.current_correct_name, string_index=s, fret=f)
 
+        if self.plan_cfg:
+            self._recent.append((time.monotonic(), bool(is_correct)))
+            self._maybe_level_up()
+
         self.feedback.config(text="✅ Correct" if is_correct else f"❌ Wrong. Correct: {self.current_correct_name}")
         self._update_ui_labels()
         self.after(450, self.next_question)
@@ -255,8 +472,7 @@ class PracticeSessionFrame(tk.Frame):
                 attempts_sum += a
                 correct_sum += c
 
-            gui_string_number = self.num_strings - s  # core s=last -> 1
-            label = f"String {gui_string_number}"
+            label = f"String {self.num_strings - s}"  # GUI numbering
             if attempts_sum == 0:
                 items.append((label, 0, None))
             else:
@@ -284,7 +500,7 @@ class PracticeSessionFrame(tk.Frame):
 
     def finish(self) -> None:
         self._stop_timer()
-        self.fretboard.clear_single_highlight()
+        self.fretboard.clear_highlight()
         save_stats(self.stats_path, self.stats)
 
         self.submit_btn.config(state=tk.DISABLED)

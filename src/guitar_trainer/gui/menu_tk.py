@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
+from typing import Callable
 
 from guitar_trainer.core.stats import Stats, load_stats, save_stats
 from guitar_trainer.core.tuning import (
@@ -17,16 +18,15 @@ class MenuFrame(ttk.Frame):
         self,
         master: tk.Misc,
         *,
-        stats_path: str,
-        on_start: callable,   # callback(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, custom_tuning)
-        on_heatmap: callable, # callback(max_fret, num_strings)
+        stats_path_resolver: Callable[[int], str],
+        on_start: callable,    # callback(..., custom_tuning, plan_config)
+        on_heatmap: callable,  # callback(max_fret, num_strings)
     ) -> None:
         super().__init__(master)
 
-        self.stats_path = stats_path
+        self.stats_path_resolver = stats_path_resolver
         self.on_start = on_start
         self.on_heatmap = on_heatmap
-        self.stats = load_stats(self.stats_path)
 
         # Vars
         self.mode_var = tk.StringVar(value="A")
@@ -34,48 +34,57 @@ class MenuFrame(ttk.Frame):
         self.max_fret_var = tk.StringVar(value="12")
         self.practice_minutes_var = tk.StringVar(value="10")
 
-        self.num_strings_var = tk.StringVar(value=str(DEFAULT_NUM_STRINGS))  # "6" or "7"
+        self.num_strings_var = tk.StringVar(value=str(DEFAULT_NUM_STRINGS))
         self.tuning_var = tk.StringVar(value=get_default_tuning_name(DEFAULT_NUM_STRINGS))
-        self.display_var = tk.StringVar(value="Sharps")  # or "Flats"
+        self.display_var = tk.StringVar(value="Sharps")
         self.custom_tuning_var = tk.StringVar(value="E A D G B E")
 
-        # Layout: two columns (left settings, right actions/info)
+        # Training plan (Practice only)
+        self.plan_var = tk.StringVar(value="None")
+        self.plan_goal_acc_var = tk.StringVar(value="0.80")
+        self.plan_goal_window_var = tk.StringVar(value="120")
+        self.plan_heat_thr_var = tk.StringVar(value="0.60")
+
+        # Stats file per instrument
+        self.stats_path = self.stats_path_resolver(self._get_num_strings())
+        self.stats = load_stats(self.stats_path)
+
+        # Layout
         root = ttk.Frame(self)
         root.pack(fill="both", expand=True)
 
-        left = ttk.Frame(root, style="Panel.TFrame")
+        left = ttk.Frame(root)
         left.pack(side="left", fill="y", padx=(0, 14))
         left.configure(padding=16)
 
-        right = ttk.Frame(root, style="Panel2.TFrame")
+        right = ttk.Frame(root)
         right.pack(side="left", fill="both", expand=True)
         right.configure(padding=16)
 
-        # Title
-        ttk.Label(left, text="Guitar Trainer", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(left, text="Dark • Modern • Practice-focused", style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
+        ttk.Label(left, text="Guitar Trainer", font=("Arial", 18, "bold")).pack(anchor="w")
+        ttk.Label(left, text="Progress is separate per instrument (6/7 strings).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 14))
 
-        # Mode box (NO BORDER)
-        mode_box = ttk.Labelframe(left, text="Mode", style="Side.TLabelframe")
-        mode_box.pack(fill="x", pady=(0, 12))
+        # Mode
+        mode_box = ttk.Labelframe(left, text="Mode")
+        mode_box.pack(fill="x", pady=(0, 14))
+        ttk.Radiobutton(mode_box, text="Mode A — Guess the note", value="A", variable=self.mode_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Mode B — Find all positions", value="B", variable=self.mode_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Adaptive (Mode A)", value="ADAPT", variable=self.mode_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(mode_box, text="Practice Session (timed)", value="PRACTICE", variable=self.mode_var).pack(anchor="w", pady=2)
 
-        ttk.Radiobutton(mode_box, text="Mode A — Guess the note", variable=self.mode_var, value="A").pack(anchor="w", pady=2)
-        ttk.Radiobutton(mode_box, text="Mode B — Find all positions", variable=self.mode_var, value="B").pack(anchor="w", pady=2)
-        ttk.Radiobutton(mode_box, text="Adaptive (Mode A)", variable=self.mode_var, value="ADAPT").pack(anchor="w", pady=2)
-        ttk.Radiobutton(mode_box, text="Practice Session (timed)", variable=self.mode_var, value="PRACTICE").pack(anchor="w", pady=2)
-
-        # Settings box (NO BORDER)
-        settings = ttk.Labelframe(left, text="Settings", style="Side.TLabelframe")
-        settings.pack(fill="x", pady=(0, 12))
+        # Settings
+        settings = ttk.Labelframe(left, text="Settings")
+        settings.pack(fill="x", pady=(0, 14))
 
         def row(parent, label: str):
             r = ttk.Frame(parent)
-            r.pack(fill="x", pady=6)
+            r.pack(fill="x", pady=4)
             ttk.Label(r, text=label).pack(side="left")
             return r
 
-        r0 = row(settings, "Instrument")
-        ttk.Combobox(r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly").pack(side="right")
+        r0 = row(settings, "Instrument (strings)")
+        self.num_strings_combo = ttk.Combobox(r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly")
+        self.num_strings_combo.pack(side="right")
 
         r1 = row(settings, "Tuning")
         self.tuning_combo = ttk.Combobox(r1, textvariable=self.tuning_var, values=[], width=26, state="readonly")
@@ -93,94 +102,148 @@ class MenuFrame(ttk.Frame):
         r5 = row(settings, "Max fret")
         ttk.Entry(r5, textvariable=self.max_fret_var, width=8).pack(side="right")
 
-        # Custom tuning box (NO BORDER)
-        custom_box = ttk.Labelframe(left, text="Custom tuning", style="Side.TLabelframe")
-        custom_box.pack(fill="x", pady=(0, 12))
-        ttk.Label(custom_box, text="Lowest → Highest", style="Muted.TLabel").pack(anchor="w")
-        self.custom_entry = ttk.Entry(custom_box, textvariable=self.custom_tuning_var)
-        self.custom_entry.pack(fill="x", pady=(6, 4))
-        self.custom_hint = ttk.Label(custom_box, text="", style="Muted.TLabel")
-        self.custom_hint.pack(anchor="w")
+        # Training plan
+        plan_box = ttk.Labelframe(left, text="Training plan (Practice)")
+        plan_box.pack(fill="x", pady=(0, 14))
 
-        # Buttons on the right
-        ttk.Label(right, text="Quick actions", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(right, text="Start training or explore your stats.", style="Muted.TLabel").pack(anchor="w", pady=(2, 16))
+        def prow(label: str):
+            rr = ttk.Frame(plan_box)
+            rr.pack(fill="x", pady=4)
+            ttk.Label(rr, text=label).pack(side="left")
+            return rr
 
-        btn_grid = ttk.Frame(right)
-        btn_grid.pack(fill="x")
-
-        start_btn = ttk.Button(btn_grid, text="▶ Start", style="Primary.TButton", command=self._start_clicked)
-        start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
-
-        heat_btn = ttk.Button(btn_grid, text="🔥 Heatmap", command=self._heatmap_clicked)
-        heat_btn.grid(row=0, column=1, sticky="ew", pady=(0, 10))
-
-        stats_btn = ttk.Button(btn_grid, text="📊 Show stats", command=self._show_stats)
-        stats_btn.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
-
-        reset_btn = ttk.Button(btn_grid, text="🧹 Reset stats", style="Danger.TButton", command=self._reset_stats)
-        reset_btn.grid(row=1, column=1, sticky="ew", pady=(0, 10))
-
-        quit_btn = ttk.Button(right, text="✖ Quit", command=self._quit)
-        quit_btn.pack(anchor="w", pady=(6, 0))
-
-        btn_grid.columnconfigure(0, weight=1)
-        btn_grid.columnconfigure(1, weight=1)
-
-        # Tip
-        tip = ttk.Label(
-            right,
-            text="Tip: Strings are numbered like on a diagram — 1 at top (thinnest), N at bottom (thickest).",
-            style="Muted.TLabel",
-            wraplength=520,
+        pr0 = prow("Profile")
+        self.plan_combo = ttk.Combobox(
+            pr0,
+            textvariable=self.plan_var,
+            values=[
+                "None",
+                "Frets 1–5",
+                "Weak spots (heatmap > 0.6)",
+                "Strings 3–6",
+            ],
+            width=26,
+            state="readonly",
         )
-        tip.pack(anchor="w", pady=(18, 0))
+        self.plan_combo.pack(side="right")
 
-        # bindings
-        self.num_strings_var.trace_add("write", lambda *_: self._refresh_tuning_options())
+        pr1 = prow("Goal accuracy")
+        self.plan_goal_acc_entry = ttk.Entry(pr1, textvariable=self.plan_goal_acc_var, width=8)
+        self.plan_goal_acc_entry.pack(side="right")
+        ttk.Label(plan_box, text="Example: 0.80 means 80% over the goal window.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
+
+        pr2 = prow("Goal window (sec)")
+        self.plan_goal_window_entry = ttk.Entry(pr2, textvariable=self.plan_goal_window_var, width=8)
+        self.plan_goal_window_entry.pack(side="right")
+
+        pr3 = prow("Heatmap threshold")
+        self.plan_heat_thr_entry = ttk.Entry(pr3, textvariable=self.plan_heat_thr_var, width=8)
+        self.plan_heat_thr_entry.pack(side="right")
+        ttk.Label(plan_box, text="0..1, where 1 = unseen/worst (same as heatmap scale).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
+
+        # Custom tuning
+        custom_box = ttk.Labelframe(left, text="Custom tuning")
+        custom_box.pack(fill="x", pady=(0, 12))
+        ttk.Label(custom_box, text="Lowest → Highest", foreground="#9aa2b6").pack(anchor="w")
+        self.custom_entry = ttk.Entry(custom_box, textvariable=self.custom_tuning_var)
+        self.custom_entry.pack(fill="x", pady=(6, 0))
+        ttk.Label(custom_box, text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.", foreground="#9aa2b6").pack(anchor="w", pady=(6, 0))
+
+        self.custom_box = custom_box
+        self._refresh_custom_visibility()
+
+        # Right actions + UX bonus label
+        ttk.Label(right, text="Actions", font=("Arial", 14, "bold")).pack(anchor="w")
+        ttk.Label(right, text="Heatmap/stats are separate for 6 vs 7 strings.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 10))
+
+        self.active_stats_label = ttk.Label(right, text="", foreground="#9aa2b6")
+        self.active_stats_label.pack(anchor="w", pady=(0, 14))
+        self._update_active_stats_label()
+
+        actions = ttk.Frame(right)
+        actions.pack(fill="x")
+
+        row1 = ttk.Frame(actions)
+        row1.pack(fill="x", pady=(0, 10))
+        ttk.Button(row1, text="▶ Start", command=self._start_clicked).pack(side="left", fill="x", expand=True, padx=(0, 10))
+        ttk.Button(row1, text="🔥 Heatmap", command=self._heatmap_clicked).pack(side="left", fill="x", expand=True)
+
+        row2 = ttk.Frame(actions)
+        row2.pack(fill="x", pady=(0, 10))
+        ttk.Button(row2, text="📊 Show stats", command=self._show_stats_clicked).pack(side="left", fill="x", expand=True, padx=(0, 10))
+        ttk.Button(row2, text="🧹 Reset stats", command=self._reset_stats_clicked).pack(side="left", fill="x", expand=True)
+
+        ttk.Button(actions, text="✖ Quit", command=self._quit_clicked).pack(anchor="w", pady=(6, 0))
+
+        # Bindings
+        self.num_strings_var.trace_add("write", lambda *_: self._on_num_strings_changed())
         self.tuning_var.trace_add("write", lambda *_: self._refresh_custom_visibility())
+        self.mode_var.trace_add("write", lambda *_: self._refresh_plan_controls())
 
         self._refresh_tuning_options()
         self._refresh_custom_visibility()
+        self._refresh_plan_controls()
+
+    def _update_active_stats_label(self) -> None:
+        self.active_stats_label.configure(text=f"Active stats file: {self.stats_path}")
 
     def _parse_int(self, value: str, *, min_value: int, max_value: int, field_name: str) -> int:
-        value = value.strip()
-        try:
-            x = int(value)
-        except ValueError:
-            raise ValueError(f"{field_name} must be an integer.")
-        if x < min_value or x > max_value:
+        v = int(value.strip())
+        if v < min_value or v > max_value:
             raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
-        return x
+        return v
+
+    def _parse_float(self, value: str, *, min_value: float, max_value: float, field_name: str) -> float:
+        v = float(value.strip())
+        if v < min_value or v > max_value:
+            raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
+        return v
 
     def _get_num_strings(self) -> int:
-        v = self.num_strings_var.get().strip()
-        return 7 if v == "7" else 6
+        try:
+            return self._parse_int(self.num_strings_var.get(), min_value=4, max_value=12, field_name="Instrument strings")
+        except Exception:
+            return DEFAULT_NUM_STRINGS
+
+    def _on_num_strings_changed(self) -> None:
+        n = self._get_num_strings()
+        self.stats_path = self.stats_path_resolver(n)
+        self.stats = load_stats(self.stats_path)
+        self._update_active_stats_label()
+        self._refresh_tuning_options()
+        self._refresh_custom_visibility()
 
     def _refresh_tuning_options(self) -> None:
         n = self._get_num_strings()
-        presets = get_tuning_presets(n)
-        options = list(presets.keys()) + [CUSTOM_TUNING_NAME]
+        presets = get_tuning_presets(num_strings=n)  # dict[str, list[int]]
+        values = list(presets.keys())
+        if CUSTOM_TUNING_NAME not in values:
+            values.append(CUSTOM_TUNING_NAME)
 
-        self.tuning_combo["values"] = options
-
+        self.tuning_combo.configure(values=values)
         cur = self.tuning_var.get()
-        if cur not in options:
+        if cur not in values:
             self.tuning_var.set(get_default_tuning_name(n))
 
-        if n == 7:
-            self.custom_tuning_var.set("B E A D G B E")
-            self.custom_hint.config(text="Example: B E A D G B E  |  You can use Eb, D#, Ab, etc.")
-        else:
-            self.custom_tuning_var.set("E A D G B E")
-            self.custom_hint.config(text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.")
-
-        self._refresh_custom_visibility()
-
     def _refresh_custom_visibility(self) -> None:
-        is_custom = (self.tuning_var.get().strip() == CUSTOM_TUNING_NAME)
-        state = "normal" if is_custom else "disabled"
-        self.custom_entry.configure(state=state)
+        if self.tuning_var.get() == CUSTOM_TUNING_NAME:
+            self.custom_box.pack(fill="x", pady=(0, 12))
+        else:
+            self.custom_box.pack_forget()
+
+    def _refresh_plan_controls(self) -> None:
+        is_practice = (self.mode_var.get().strip().upper() == "PRACTICE")
+
+        # profile combobox
+        self.plan_combo.configure(state=("readonly" if is_practice else "disabled"))
+
+        # ONLY these entries (avoid recursion; Combobox is a subclass of Entry)
+        entry_state = ("normal" if is_practice else "disabled")
+        for w in (self.plan_goal_acc_entry, self.plan_goal_window_entry, self.plan_heat_thr_entry):
+            try:
+                w.configure(state=entry_state)
+            except Exception:
+                pass
 
     def _start_clicked(self) -> None:
         try:
@@ -204,11 +267,56 @@ class MenuFrame(ttk.Frame):
                 messagebox.showerror("Invalid custom tuning", str(e))
                 return
 
-        if mode not in {"A", "B", "ADAPT", "PRACTICE"}:
-            messagebox.showerror("Invalid mode", "Mode must be A, B, ADAPT or PRACTICE.")
-            return
+        plan_config = None
+        if mode == "PRACTICE":
+            plan_name = self.plan_var.get().strip()
+            if plan_name and plan_name != "None":
+                try:
+                    goal_acc = self._parse_float(self.plan_goal_acc_var.get(), min_value=0.0, max_value=1.0, field_name="Goal accuracy")
+                    goal_win = self._parse_int(self.plan_goal_window_var.get(), min_value=10, max_value=1800, field_name="Goal window (sec)")
+                    heat_thr = self._parse_float(self.plan_heat_thr_var.get(), min_value=0.0, max_value=1.0, field_name="Heatmap threshold")
+                except ValueError as e:
+                    messagebox.showerror("Invalid training plan", str(e))
+                    return
 
-        self.on_start(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, custom_tuning)
+                if plan_name == "Frets 1–5":
+                    plan_config = {
+                        "profile": "FRETS_1_5",
+                        "goal_accuracy": goal_acc,
+                        "goal_window_sec": goal_win,
+                        "start_fret": 1,
+                        "end_fret": 5,
+                        "ramp_step_frets": 2,
+                    }
+                elif plan_name == "Strings 3–6":
+                    plan_config = {
+                        "profile": "STRINGS_3_6",
+                        "goal_accuracy": goal_acc,
+                        "goal_window_sec": goal_win,
+                        "strings_gui_from": 3,
+                        "strings_gui_to": num_strings,
+                        "ramp_step_strings": 1,
+                    }
+                else:  # weak heatmap
+                    plan_config = {
+                        "profile": "WEAK_HEATMAP",
+                        "goal_accuracy": goal_acc,
+                        "goal_window_sec": goal_win,
+                        "heat_threshold": heat_thr,
+                        "ramp_step_threshold": 0.10,
+                    }
+
+        self.on_start(
+            mode,
+            num_questions,
+            max_fret,
+            tuning_name,
+            practice_minutes,
+            prefer_flats,
+            num_strings,
+            custom_tuning,
+            plan_config,  # <-- important
+        )
 
     def _heatmap_clicked(self) -> None:
         try:
@@ -219,17 +327,25 @@ class MenuFrame(ttk.Frame):
         num_strings = self._get_num_strings()
         self.on_heatmap(max_fret, num_strings)
 
-    def _show_stats(self) -> None:
+    def _show_stats_clicked(self) -> None:
         self.stats = load_stats(self.stats_path)
-        messagebox.showinfo("Statistics", self.stats.summary())
+        total_attempts = int(self.stats.total_attempts)
+        total_correct = int(self.stats.total_correct)
+        acc = (total_correct / total_attempts * 100.0) if total_attempts > 0 else 0.0
+        messagebox.showinfo(
+            "Stats",
+            f"Stats file: {self.stats_path}\n\nAttempts: {total_attempts}\nCorrect: {total_correct}\nAccuracy: {acc:.1f}%",
+        )
 
-    def _reset_stats(self) -> None:
-        answer = messagebox.askyesno("Reset stats", "Are you sure you want to reset statistics?")
-        if not answer:
+    def _reset_stats_clicked(self) -> None:
+        if not messagebox.askyesno(
+            "Reset stats",
+            f"This will erase stats for this instrument:\n{self.stats_path}\n\nContinue?",
+        ):
             return
         self.stats = Stats()
         save_stats(self.stats_path, self.stats)
-        messagebox.showinfo("Reset stats", "Statistics have been reset.")
+        messagebox.showinfo("Reset stats", f"Stats reset:\n{self.stats_path}")
 
-    def _quit(self) -> None:
-        self.master.destroy()
+    def _quit_clicked(self) -> None:
+        self.winfo_toplevel().destroy()
