@@ -45,7 +45,7 @@ jobs:
       - name: Build with PyInstaller (Linux)
         if: runner.os == 'Linux'
         run: |
-          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed -m guitar_trainer.app gui
+          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed scripts/run_gui.py
           cd dist
           zip -r GuitarTrainer-linux-x64.zip GuitarTrainer
 
@@ -53,7 +53,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed -m guitar_trainer.app gui
+          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed scripts\run_gui.py
           Compress-Archive -Path "dist\GuitarTrainer\*" -DestinationPath "dist\GuitarTrainer-windows-x64.zip" -Force
 
       - name: Upload artifact (Linux)
