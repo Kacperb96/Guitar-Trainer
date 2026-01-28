@@ -275,7 +275,7 @@ class Fretboard(tk.Frame):
 
         # toggle (not in heatmap)
         if not self._heatmap_mode:
-            self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTY")
+            self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTE")
             btn_cx = gutter_x0 + (gutter_w / 2)
             btn_y = max(12, band_top - 18)
             self.canvas.create_window(btn_cx, btn_y, window=self._toggle_labels_btn, anchor="center")

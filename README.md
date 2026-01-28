@@ -1,70 +1,56 @@
-# Guitar Trainer (Python)
+# 🎸 Guitar Trainer
 
-A small Python app to help you learn notes on the guitar fretboard.
-It includes:
-- CLI training modes
-- Tkinter GUI with:
-  - Mode A (guess the note from a highlighted position)
-  - Mode B (click all positions for a given note)
-  - Adaptive Mode (focuses weak/unseen positions)
-  - Heatmap (attempts/accuracy per fretboard position)
-- Statistics saved to `stats.json`
+**Guitar Trainer** is a desktop application for learning and memorizing notes on the guitar fretboard.  
+It helps you practice note recognition, fretboard positions, and weak areas using adaptive training and heatmaps.
 
-## Requirements
-- Python 3.11+ (Ubuntu often uses `python3`)
-- Recommended: a virtual environment (venv)
+This project started as a personal learning tool and evolved into a **robust, cross-platform desktop application** with a strong focus on stability, usability, and clean architecture.
 
 ---
 
-## Setup (recommended way)
+## ✨ Features
 
-### 1) Create and activate venv
-From the project root:
+- **Multiple training modes**
+  - Mode A — Guess the note
+  - Mode B — Find all positions
+  - Adaptive mode (focuses on weak areas)
+  - Timed practice sessions
 
-python3 -m venv .venv
-source .venv/bin/activate
+- **Heatmap-based learning**
+  - Visualize weak frets and strings
+  - Practice based on real performance data
 
-### 2) Install the project (editable)
+- **Per-profile statistics**
+  - Separate progress per number of strings and tuning
+  - Accuracy tracking and session summaries
 
-This makes the src/ package importable and installs the CLI entry point.
+- **Configurable setup**
+  - 6 / 7 string guitars
+  - Standard and custom tunings
+  - Sharps / flats notation
+  - Configurable fret range
 
-python3 -m pip install -U pip
-python3 -m pip install -e ".[dev]"
+- **Cross-platform**
+  - Linux
+  - Windows (standalone `.exe`, no Python required)
 
-If python is not available on your system, always use python3.
+---
 
-Run
-GUI (Start Menu)
-guitar-trainer gui
+## 📦 Download (Recommended)
 
-or without the entry-point:
+### Windows
+1. Go to **Releases**:
+   👉 https://github.com/Kacperb96/Guitar-Trainer/releases
+2. Download
+3. Extract the ZIP
+4. Run
 
-python3 -m guitar_trainer.app gui
+✅ No Python installation required.
 
-CLI (terminal version)
-guitar-trainer
+---
 
-or:
-
-python3 -m guitar_trainer.app
-
-Tests
-python3 -m pytest
-
-Project structure (simplified)
-src/guitar_trainer/
-  app.py                 # main entry point (CLI/GUI switch)
-  cli.py                 # terminal UI
-  core/                  # pure logic (notes, mapping, stats, adaptive)
-  gui/                   # Tkinter UI (menu, fretboard, quiz, heatmap)
-tests/
-
-Notes
-
-String numbering in GUI:
-
-1 at the top = high e
-
-6 at the bottom = low E
-
-Statistics are stored in stats.json in the project root.
+### Linux
+1. Go to **Releases**
+2. Download
+3. Extract and run:
+```bash
+./GuitarTrainer
