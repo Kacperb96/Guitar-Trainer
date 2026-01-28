@@ -13,10 +13,15 @@ MUTED = "#a9afbf"
 
 BORDER = "#242a3a"
 ACCENT = "#4c8dff"     # blue
-ACCENT_2 = "#ff4d6d"   # red/pink (for highlights later)
+ACCENT_2 = "#ff4d6d"   # red/pink (reserved)
 OK = "#2ecc71"
 WARN = "#f39c12"
 ERR = "#e74c3c"
+
+# Better highlight colors for selection / hover
+HOVER_BG = "#1b2131"
+SELECT_BG = "#203a66"  # darker blue background for selected rows
+SELECT_FG = "#ffffff"
 
 
 def apply_theme(root: tk.Tk) -> None:
@@ -52,7 +57,6 @@ def apply_theme(root: tk.Tk) -> None:
     style.configure("Title.TLabel", background=BG, foreground=TEXT, font=heading_font)
 
     # Labelframe (default)
-    # Keep a subtle border for general use
     style.configure(
         "TLabelframe",
         background=BG,
@@ -68,7 +72,7 @@ def apply_theme(root: tk.Tk) -> None:
         "Side.TLabelframe",
         background=PANEL,
         foreground=TEXT,
-        bordercolor=PANEL,   # same as background => invisible
+        bordercolor=PANEL,
         relief="flat",
         borderwidth=0,
     )
@@ -120,7 +124,7 @@ def apply_theme(root: tk.Tk) -> None:
     )
     style.map(
         "TButton",
-        background=[("active", "#1b2131"), ("pressed", "#0b0e14")],
+        background=[("active", HOVER_BG), ("pressed", "#0b0e14")],
         foreground=[("disabled", MUTED)],
         bordercolor=[("active", "#2d3550")],
     )
@@ -140,7 +144,7 @@ def apply_theme(root: tk.Tk) -> None:
         foreground=[("disabled", MUTED)],
     )
 
-    # Danger / secondary
+    # Danger button
     style.configure(
         "Danger.TButton",
         background=ERR,
@@ -154,27 +158,50 @@ def apply_theme(root: tk.Tk) -> None:
         foreground=[("disabled", MUTED)],
     )
 
-    # Radiobutton
+    # Radiobutton (improved readability)
+    # NOTE: With ttk + "clam", selection visuals are mostly controlled via style maps.
     style.configure(
         "TRadiobutton",
         background=BG,
         foreground=TEXT,
-        padding=6,
+        padding=(10, 6),   # a bit more "row-like"
+        indicatorcolor=ACCENT,  # supported in many Tk builds (safe if ignored)
+        indicatormargin=(0, 0, 8, 0),
+        focuscolor=BORDER,
+        focusthickness=0,
     )
     style.map(
         "TRadiobutton",
-        foreground=[("disabled", MUTED)],
+        background=[
+            ("selected", SELECT_BG),
+            ("active", HOVER_BG),
+        ],
+        foreground=[
+            ("selected", SELECT_FG),
+            ("disabled", MUTED),
+        ],
+        indicatorcolor=[
+            ("selected", ACCENT),
+            ("active", ACCENT),
+        ],
     )
 
-    # Checkbutton (if used later)
+    # Checkbutton (if used)
     style.configure(
         "TCheckbutton",
         background=BG,
         foreground=TEXT,
-        padding=6,
+        padding=(10, 6),
+        indicatorcolor=ACCENT,
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", HOVER_BG)],
+        foreground=[("disabled", MUTED)],
+        indicatorcolor=[("selected", ACCENT)],
     )
 
-    # Notebook (tabs) if used later
+    # Notebook (tabs) if used
     style.configure("TNotebook", background=BG, bordercolor=BORDER)
     style.configure("TNotebook.Tab", background=PANEL, foreground=TEXT, padding=(12, 8))
     style.map("TNotebook.Tab", background=[("selected", PANEL_2)])
