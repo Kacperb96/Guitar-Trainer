@@ -1,0 +1,82 @@
+{
+  "total_attempts": 7,
+  "total_correct": 4,
+  "by_mode": {
+    "A": {
+      "attempts": 7,
+      "correct": 4
+    },
+    "B": {
+      "attempts": 0,
+      "correct": 0
+    }
+  },
+  "by_note": {
+    "B": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "G#": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "C#": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "E": {
+      "attempts": 2,
+      "correct": 2
+    },
+    "F": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "F#": {
+      "attempts": 1,
+      "correct": 1
+    }
+  },
+  "by_position": {
+    "2,9": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "5,4": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "1,4": {
+      "attempts": 1,
+      "correct": 0
+    },
+    "3,9": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "4,5": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "2,3": {
+      "attempts": 1,
+      "correct": 1
+    },
+    "4,7": {
+      "attempts": 1,
+      "correct": 1
+    }
+  },
+  "meta": {
+    "num_strings": 6,
+    "tuning_name": "E Standard",
+    "tuning": [
+      4,
+      9,
+      2,
+      7,
+      11,
+      4
+    ]
+  }
+}

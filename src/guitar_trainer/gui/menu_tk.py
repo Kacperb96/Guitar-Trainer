@@ -11,6 +11,12 @@ from guitar_trainer.core.tuning import (
     CUSTOM_TUNING_NAME,
     parse_custom_tuning_text,
 )
+from guitar_trainer.core.settings import (
+    build_settings_from_menu,
+    parse_int_field,
+    MAX_FRET_MIN,
+    MAX_FRET_MAX,
+)
 
 
 class MenuFrame(ttk.Frame):
@@ -62,7 +68,11 @@ class MenuFrame(ttk.Frame):
         right.configure(padding=16)
 
         ttk.Label(left, text="Guitar Trainer", font=("Arial", 18, "bold")).pack(anchor="w")
-        ttk.Label(left, text="Progress is separate per instrument AND tuning.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 14))
+        ttk.Label(
+            left,
+            text="Progress is separate per instrument AND tuning.",
+            foreground="#9aa2b6",
+        ).pack(anchor="w", pady=(2, 14))
 
         # Mode
         mode_box = ttk.Labelframe(left, text="Mode")
@@ -83,7 +93,9 @@ class MenuFrame(ttk.Frame):
             return r
 
         r0 = row(settings, "Instrument (strings)")
-        self.num_strings_combo = ttk.Combobox(r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly")
+        self.num_strings_combo = ttk.Combobox(
+            r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly"
+        )
         self.num_strings_combo.pack(side="right")
 
         r1 = row(settings, "Tuning")
@@ -130,7 +142,11 @@ class MenuFrame(ttk.Frame):
         pr1 = prow("Goal accuracy")
         self.plan_goal_acc_entry = ttk.Entry(pr1, textvariable=self.plan_goal_acc_var, width=8)
         self.plan_goal_acc_entry.pack(side="right")
-        ttk.Label(plan_box, text="Example: 0.80 means 80% over the goal window.", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            plan_box,
+            text="Example: 0.80 means 80% over the goal window.",
+            foreground="#9aa2b6",
+        ).pack(anchor="w", pady=(2, 0))
 
         pr2 = prow("Goal window (sec)")
         self.plan_goal_window_entry = ttk.Entry(pr2, textvariable=self.plan_goal_window_var, width=8)
@@ -139,7 +155,11 @@ class MenuFrame(ttk.Frame):
         pr3 = prow("Heatmap threshold")
         self.plan_heat_thr_entry = ttk.Entry(pr3, textvariable=self.plan_heat_thr_var, width=8)
         self.plan_heat_thr_entry.pack(side="right")
-        ttk.Label(plan_box, text="0..1, where 1 = unseen/worst (heatmap scale).", foreground="#9aa2b6").pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            plan_box,
+            text="0..1, where 1 = unseen/worst (heatmap scale).",
+            foreground="#9aa2b6",
+        ).pack(anchor="w", pady=(2, 0))
 
         # Custom tuning
         custom_box = ttk.Labelframe(left, text="Custom tuning")
@@ -147,7 +167,11 @@ class MenuFrame(ttk.Frame):
         ttk.Label(custom_box, text="Lowest → Highest", foreground="#9aa2b6").pack(anchor="w")
         self.custom_entry = ttk.Entry(custom_box, textvariable=self.custom_tuning_var)
         self.custom_entry.pack(fill="x", pady=(6, 0))
-        ttk.Label(custom_box, text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.", foreground="#9aa2b6").pack(anchor="w", pady=(6, 0))
+        ttk.Label(
+            custom_box,
+            text="Example: E A D G B E  |  You can use Eb, D#, Ab, etc.",
+            foreground="#9aa2b6",
+        ).pack(anchor="w", pady=(6, 0))
 
         self.custom_box = custom_box
         self._refresh_tuning_options()
@@ -183,23 +207,13 @@ class MenuFrame(ttk.Frame):
 
         self._refresh_plan_controls()
 
-    def _parse_int(self, value: str, *, min_value: int, max_value: int, field_name: str) -> int:
-        v = int(value.strip())
-        if v < min_value or v > max_value:
-            raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
-        return v
-
-    def _parse_float(self, value: str, *, min_value: float, max_value: float, field_name: str) -> float:
-        v = float(value.strip())
-        if v < min_value or v > max_value:
-            raise ValueError(f"{field_name} must be between {min_value} and {max_value}.")
-        return v
-
     def _get_num_strings(self) -> int:
+        # Keep this robust and independent of settings.py symbols.
         try:
-            return self._parse_int(self.num_strings_var.get(), min_value=4, max_value=12, field_name="Instrument strings")
+            n = int(self.num_strings_var.get().strip())
         except Exception:
             return DEFAULT_NUM_STRINGS
+        return n if 4 <= n <= 12 else DEFAULT_NUM_STRINGS
 
     def _refresh_tuning_options(self) -> None:
         n = self._get_num_strings()
@@ -241,11 +255,9 @@ class MenuFrame(ttk.Frame):
         self.active_stats_label.configure(text=f"Active stats file: {self.stats_path}")
 
     def _on_settings_changed(self) -> None:
-        # tuning options may depend on num_strings
         self._refresh_tuning_options()
         self._refresh_custom_visibility()
 
-        # update active stats file preview
         self.stats_path = self._compute_stats_path()
         self.stats = load_stats(self.stats_path)
         self._update_active_stats_label()
@@ -259,80 +271,44 @@ class MenuFrame(ttk.Frame):
 
     def _start_clicked(self) -> None:
         try:
-            mode = self.mode_var.get().strip().upper()
-            num_questions = self._parse_int(self.questions_var.get(), min_value=1, max_value=200, field_name="Questions")
-            practice_minutes = self._parse_int(self.practice_minutes_var.get(), min_value=1, max_value=120, field_name="Practice minutes")
-            max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
+            settings = build_settings_from_menu(
+                mode_raw=self.mode_var.get(),
+                questions_raw=self.questions_var.get(),
+                practice_minutes_raw=self.practice_minutes_var.get(),
+                max_fret_raw=self.max_fret_var.get(),
+                num_strings_raw=self.num_strings_var.get(),
+                tuning_name_raw=self.tuning_var.get(),
+                display_raw=self.display_var.get(),
+                custom_tuning_raw=self.custom_tuning_var.get(),
+                plan_name_raw=self.plan_var.get(),
+                plan_goal_acc_raw=self.plan_goal_acc_var.get(),
+                plan_goal_window_raw=self.plan_goal_window_var.get(),
+                plan_heat_thr_raw=self.plan_heat_thr_var.get(),
+            )
         except ValueError as e:
             messagebox.showerror("Invalid settings", str(e))
             return
 
-        num_strings = self._get_num_strings()
-        tuning_name = self.tuning_var.get().strip()
-        prefer_flats = (self.display_var.get().strip().lower() == "flats")
-
-        custom_tuning = None
-        if tuning_name == CUSTOM_TUNING_NAME:
-            try:
-                custom_tuning = parse_custom_tuning_text(self.custom_tuning_var.get(), num_strings=num_strings)
-            except ValueError as e:
-                messagebox.showerror("Invalid custom tuning", str(e))
-                return
-
-        plan_config = None
-        if mode == "PRACTICE":
-            plan_name = self.plan_var.get().strip()
-            if plan_name and plan_name != "None":
-                try:
-                    goal_acc = self._parse_float(self.plan_goal_acc_var.get(), min_value=0.0, max_value=1.0, field_name="Goal accuracy")
-                    goal_win = self._parse_int(self.plan_goal_window_var.get(), min_value=10, max_value=1800, field_name="Goal window (sec)")
-                    heat_thr = self._parse_float(self.plan_heat_thr_var.get(), min_value=0.0, max_value=1.0, field_name="Heatmap threshold")
-                except ValueError as e:
-                    messagebox.showerror("Invalid training plan", str(e))
-                    return
-
-                if plan_name == "Frets 1–5":
-                    plan_config = {
-                        "profile": "FRETS_1_5",
-                        "goal_accuracy": goal_acc,
-                        "goal_window_sec": goal_win,
-                        "start_fret": 1,
-                        "end_fret": 5,
-                        "ramp_step_frets": 2,
-                    }
-                elif plan_name == "Strings 3–6":
-                    plan_config = {
-                        "profile": "STRINGS_3_6",
-                        "goal_accuracy": goal_acc,
-                        "goal_window_sec": goal_win,
-                        "strings_gui_from": 3,
-                        "strings_gui_to": num_strings,
-                        "ramp_step_strings": 1,
-                    }
-                else:
-                    plan_config = {
-                        "profile": "WEAK_HEATMAP",
-                        "goal_accuracy": goal_acc,
-                        "goal_window_sec": goal_win,
-                        "heat_threshold": heat_thr,
-                        "ramp_step_threshold": 0.10,
-                    }
-
         self.on_start(
-            mode,
-            num_questions,
-            max_fret,
-            tuning_name,
-            practice_minutes,
-            prefer_flats,
-            num_strings,
-            custom_tuning,
-            plan_config,
+            settings.mode,
+            settings.num_questions,
+            settings.max_fret,
+            settings.tuning_name,
+            settings.practice_minutes,
+            settings.prefer_flats,
+            settings.num_strings,
+            settings.custom_tuning,
+            settings.plan_config,
         )
 
     def _heatmap_clicked(self) -> None:
         try:
-            max_fret = self._parse_int(self.max_fret_var.get(), min_value=0, max_value=24, field_name="Max fret")
+            max_fret = parse_int_field(
+                self.max_fret_var.get(),
+                min_value=MAX_FRET_MIN,
+                max_value=MAX_FRET_MAX,
+                field_name="Max fret",
+            )
         except ValueError as e:
             messagebox.showerror("Invalid settings", str(e))
             return
@@ -343,10 +319,16 @@ class MenuFrame(ttk.Frame):
         attempts = int(self.stats.total_attempts)
         correct = int(self.stats.total_correct)
         acc = (100.0 * correct / attempts) if attempts > 0 else 0.0
-        messagebox.showinfo("Stats", f"Stats file: {self.stats_path}\n\nAttempts: {attempts}\nCorrect: {correct}\nAccuracy: {acc:.1f}%")
+        messagebox.showinfo(
+            "Stats",
+            f"Stats file: {self.stats_path}\n\nAttempts: {attempts}\nCorrect: {correct}\nAccuracy: {acc:.1f}%",
+        )
 
     def _reset_stats_clicked(self) -> None:
-        if not messagebox.askyesno("Reset stats", f"This will erase stats for this profile:\n{self.stats_path}\n\nContinue?"):
+        if not messagebox.askyesno(
+            "Reset stats",
+            f"This will erase stats for this profile:\n{self.stats_path}\n\nContinue?",
+        ):
             return
         self.stats = Stats()
         save_stats(self.stats_path, self.stats)
@@ -354,4 +336,3 @@ class MenuFrame(ttk.Frame):
 
     def _quit_clicked(self) -> None:
         self.winfo_toplevel().destroy()
-

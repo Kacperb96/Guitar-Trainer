@@ -10,16 +10,14 @@ from typing import Deque, List, Optional, Set, Tuple
 from guitar_trainer.core.adaptive import choose_adaptive_position
 from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
 from guitar_trainer.core.stats import Stats, save_stats
+from guitar_trainer.core.position_key import pos_key
+from guitar_trainer.core.training_plan import TrainingPlanConfig
 from guitar_trainer.gui.fretboard import Fretboard, Position
 from guitar_trainer.gui.practice_summary_tk import PracticeSummary
 
 
-def _pos_key(s: int, f: int) -> str:
-    return f"{s},{f}"
-
-
 def _get_attempts_correct(stats: Stats, s: int, f: int) -> tuple[int, int]:
-    data = stats.by_position.get(_pos_key(s, f))
+    data = stats.by_position.get(pos_key(s, f))
     if not data:
         return 0, 0
     attempts = int(data.get("attempts", 0))
@@ -35,28 +33,6 @@ def _rank_weak_items(items: List[Tuple[str, int, float | None]], top_n: int = 3)
         return (not_practiced, acc_val, attempts)
 
     return sorted(items, key=key_fn)[:top_n]
-
-
-# ----------------------------
-# Training plan
-# ----------------------------
-@dataclass
-class TrainingPlanConfig:
-    profile: str  # "FRETS_1_5" | "WEAK_HEATMAP" | "STRINGS_3_6"
-    goal_accuracy: float = 0.80
-    goal_window_sec: int = 120
-
-    # profile params:
-    start_fret: int = 1
-    end_fret: int = 5
-    heat_threshold: float = 0.60  # "badness" in [0..1], where 1=unseen/worst (same as heatmap: 1-accuracy)
-    strings_gui_from: int = 3  # GUI numbering: 1 is top (thinnest)
-    strings_gui_to: int = 6
-
-    # ramp params:
-    ramp_step_frets: int = 2
-    ramp_step_strings: int = 1
-    ramp_step_threshold: float = 0.10
 
 
 class TrainingPlanState:
@@ -87,15 +63,15 @@ class TrainingPlanState:
     def constraints(self, stats: Stats) -> tuple[Optional[Set[int]], Optional[Set[int]], Optional[Set[Position]]]:
         # returns (allowed_strings_core, allowed_frets, allowed_positions)
         if self.cfg.profile == "FRETS_1_5":
-            start = max(0, self.cfg.start_fret)
-            end = max(start, self.current_end_fret)
+            start = max(0, int(self.cfg.start_fret))
+            end = max(start, int(self.current_end_fret))
             frets = {f for f in range(start, min(self.max_fret, end) + 1)}
             return None, frets, None
 
         if self.cfg.profile == "STRINGS_3_6":
             # Convert GUI numbering (1=top) to core indices (0=bottom):
-            gui_from = self.current_strings_gui_from
-            gui_to = self.current_strings_gui_to
+            gui_from = int(self.current_strings_gui_from)
+            gui_to = int(self.current_strings_gui_to)
             core_set: Set[int] = set()
             for gui_n in range(gui_from, gui_to + 1):
                 core_idx = self.num_strings - gui_n
@@ -104,9 +80,8 @@ class TrainingPlanState:
             return core_set or None, None, None
 
         if self.cfg.profile == "WEAK_HEATMAP":
-            # Use arbitrary positions set (precise).
             pos: Set[Position] = set()
-            thr = max(0.0, min(1.0, self.current_heat_threshold))
+            thr = max(0.0, min(1.0, float(self.current_heat_threshold)))
             for s in range(self.num_strings):
                 for f in range(self.max_fret + 1):
                     attempts, correct = _get_attempts_correct(stats, s, f)
@@ -122,27 +97,23 @@ class TrainingPlanState:
         return None, None, None
 
     def maybe_level_up(self) -> bool:
-        """
-        Apply ramp (broaden difficulty). Returns True if something changed.
-        """
         changed = False
         if self.cfg.profile == "FRETS_1_5":
             if self.current_end_fret < self.max_fret:
-                self.current_end_fret = min(self.max_fret, self.current_end_fret + max(1, self.cfg.ramp_step_frets))
+                self.current_end_fret = min(self.max_fret, self.current_end_fret + max(1, int(self.cfg.ramp_step_frets)))
                 changed = True
 
         elif self.cfg.profile == "STRINGS_3_6":
-            # expand toward string 1 (thinnest) first
             if self.current_strings_gui_from > 1:
-                self.current_strings_gui_from = max(1, self.current_strings_gui_from - max(1, self.cfg.ramp_step_strings))
+                self.current_strings_gui_from = max(1, self.current_strings_gui_from - max(1, int(self.cfg.ramp_step_strings)))
                 changed = True
             elif self.current_strings_gui_to < self.num_strings:
-                self.current_strings_gui_to = min(self.num_strings, self.current_strings_gui_to + max(1, self.cfg.ramp_step_strings))
+                self.current_strings_gui_to = min(self.num_strings, self.current_strings_gui_to + max(1, int(self.cfg.ramp_step_strings)))
                 changed = True
 
         elif self.cfg.profile == "WEAK_HEATMAP":
             if self.current_heat_threshold > 0.0:
-                self.current_heat_threshold = max(0.0, self.current_heat_threshold - max(0.01, self.cfg.ramp_step_threshold))
+                self.current_heat_threshold = max(0.0, self.current_heat_threshold - max(0.01, float(self.cfg.ramp_step_threshold)))
                 changed = True
 
         if changed:
@@ -174,7 +145,7 @@ class PracticeSessionFrame(tk.Frame):
         rng_seed: int | None = None,
         allowed_strings: Optional[Set[int]] = None,
         allowed_frets: Optional[Set[int]] = None,
-        training_plan: Optional[dict] = None,
+        training_plan: Optional[TrainingPlanConfig] = None,
         on_back=None,
         on_finish=None,
     ) -> None:
@@ -211,16 +182,10 @@ class PracticeSessionFrame(tk.Frame):
             if not self.allowed_frets:
                 self.allowed_frets = None
 
-        # Training plan (optional)
-        self.plan_cfg: TrainingPlanConfig | None = None
+        self.plan_cfg: TrainingPlanConfig | None = training_plan
         self.plan_state: TrainingPlanState | None = None
-        if training_plan:
-            try:
-                self.plan_cfg = TrainingPlanConfig(**training_plan)
-                self.plan_state = TrainingPlanState(self.plan_cfg, max_fret=self.max_fret, num_strings=self.num_strings)
-            except Exception:
-                self.plan_cfg = None
-                self.plan_state = None
+        if self.plan_cfg is not None:
+            self.plan_state = TrainingPlanState(self.plan_cfg, max_fret=self.max_fret, num_strings=self.num_strings)
 
         # Rolling window for goal checking
         self._recent: Deque[tuple[float, bool]] = deque()
@@ -263,17 +228,16 @@ class PracticeSessionFrame(tk.Frame):
             tk.Button(btns, text="Back to menu", command=self._back).pack(side="left", padx=(0, 6))
         tk.Button(btns, text="End session", command=self._end_early).pack(side="left")
 
-        info = tk.Frame(self)
-        info.pack(fill="x", pady=(0, 6))
-        self.time_left_label = tk.Label(info, text="")
-        self.time_left_label.pack(side="left")
-        self.score_label = tk.Label(info, text="")
-        self.score_label.pack(side="right")
+        self.time_left_label = tk.Label(self, text="", font=("Arial", 12))
+        self.time_left_label.pack()
 
-        self.plan_label = tk.Label(info, text="", fg="#9aa2b6")
-        self.plan_label.pack(side="left", padx=(14, 0))
+        self.score_label = tk.Label(self, text="", font=("Arial", 12))
+        self.score_label.pack()
 
-        self.fretboard = Fretboard(self, num_frets=max_fret, tuning=self.tuning, enable_click_reporting=False)
+        self.plan_label = tk.Label(self, text="", font=("Arial", 11))
+        self.plan_label.pack(pady=(2, 0))
+
+        self.fretboard = Fretboard(self, num_strings=self.num_strings, max_fret=self.max_fret, tuning=self.tuning, enable_click_reporting=False)
         self.fretboard.pack(fill="both", expand=True, padx=10, pady=10)
 
         entry_row = tk.Frame(self)
@@ -327,7 +291,7 @@ class PracticeSessionFrame(tk.Frame):
         if not self.plan_cfg:
             return 0.0, 0, 0
         now = time.monotonic()
-        cutoff = now - self.plan_cfg.goal_window_sec
+        cutoff = now - int(self.plan_cfg.goal_window_sec)
         while self._recent and self._recent[0][0] < cutoff:
             self._recent.popleft()
         total = len(self._recent)
@@ -341,7 +305,7 @@ class PracticeSessionFrame(tk.Frame):
         acc, _c, n = self._window_stats()
         if n < 10:
             return
-        if acc >= self.plan_cfg.goal_accuracy:
+        if acc >= float(self.plan_cfg.goal_accuracy):
             if self.plan_state.maybe_level_up():
                 self._recent.clear()
                 self._last_levelup_msg_until = time.monotonic() + 2.5
@@ -354,7 +318,7 @@ class PracticeSessionFrame(tk.Frame):
 
         if self.plan_state and self.plan_cfg:
             acc, _c, n = self._window_stats()
-            goal = int(self.plan_cfg.goal_accuracy * 100)
+            goal = int(float(self.plan_cfg.goal_accuracy) * 100)
             cur = int(acc * 100)
             self.plan_label.config(text=f"{self.plan_state.describe()} | Goal: {cur}%/{goal}% ({n})")
         else:

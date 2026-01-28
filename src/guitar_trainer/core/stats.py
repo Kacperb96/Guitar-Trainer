@@ -8,12 +8,10 @@ import os
 from pathlib import Path
 import tempfile
 
+from guitar_trainer.core.position_key import pos_key
+
 
 logger = logging.getLogger("guitar_trainer.stats")
-
-
-def _pos_key(string_index: int, fret: int) -> str:
-    return f"{string_index},{fret}"
 
 
 def _ensure_bucket(d: Dict[str, Dict[str, int]], key: str) -> Dict[str, int]:
@@ -35,13 +33,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _atomic_write_json(path: str, data: dict) -> None:
-    """
-    Atomic JSON write:
-    - write to a temp file in the same directory
-    - fsync
-    - os.replace to target path
-    If anything fails, this function raises (caller decides whether to swallow).
-    """
+    """Write JSON atomically (temp file + replace)."""
     p = Path(path)
     parent = p.parent
 
@@ -49,7 +41,6 @@ def _atomic_write_json(path: str, data: dict) -> None:
     if str(parent) not in ("", "."):
         parent.mkdir(parents=True, exist_ok=True)
 
-    # Create temp file in the same directory for atomic replace.
     fd, tmp_path = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -58,7 +49,6 @@ def _atomic_write_json(path: str, data: dict) -> None:
             os.fsync(f.fileno())
         os.replace(tmp_path, str(p))
     finally:
-        # Cleanup if something failed before replace.
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -71,14 +61,10 @@ class Stats:
     total_attempts: int = 0
     total_correct: int = 0
 
-    # required by tests
     by_mode: Dict[str, Dict[str, int]] = field(default_factory=dict)
-
-    # used by CLI + GUI
     by_note: Dict[str, Dict[str, int]] = field(default_factory=dict)
     by_position: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
-    # metadata for instrument/tuning separation
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def _record_mode(self, mode: str, correct: bool) -> None:
@@ -133,7 +119,7 @@ class Stats:
 
         self.record_attempt(mode=mode, correct=correct, note_name=note_name, string_index=string_index)
 
-        key = _pos_key(string_index, fret)
+        key = pos_key(string_index, fret)
         bucket = _ensure_bucket(self.by_position, key)
         bucket["attempts"] += 1
         if correct:
@@ -148,11 +134,11 @@ def _default_stats() -> Stats:
 
 
 def load_stats(path: str) -> Stats:
-    """
-    Safe load:
-    - missing file => default stats
-    - invalid JSON => default stats (do not crash)
-    - permission/IO errors => default stats (do not crash)
+    """Safely load stats from JSON.
+
+    - Missing file => default stats
+    - Invalid JSON => default stats (no crash)
+    - Permission/IO errors => default stats (no crash)
     """
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -180,17 +166,12 @@ def load_stats(path: str) -> Stats:
         logger.warning("Failed to load stats from '%s': %s", path, e)
         return _default_stats()
     except Exception as e:
-        # Last-resort safety net: never crash on stats load.
         logger.exception("Unexpected error while loading stats from '%s': %s", path, e)
         return _default_stats()
 
 
 def save_stats(path: str, stats: Stats) -> None:
-    """
-    Safe save:
-    - atomic write (temp + replace)
-    - IO errors are swallowed (app should not crash)
-    """
+    """Safely save stats to JSON (atomic write, no crash on failure)."""
     payload = {
         "total_attempts": _safe_int(stats.total_attempts, 0),
         "total_correct": _safe_int(stats.total_correct, 0),
@@ -203,6 +184,5 @@ def save_stats(path: str, stats: Stats) -> None:
     try:
         _atomic_write_json(path, payload)
     except Exception as e:
-        # Do not crash the app if saving fails.
         logger.warning("Failed to save stats to '%s': %s", path, e)
         return
