@@ -237,7 +237,12 @@ class PracticeSessionFrame(tk.Frame):
         self.plan_label = tk.Label(self, text="", font=("Arial", 11))
         self.plan_label.pack(pady=(2, 0))
 
-        self.fretboard = Fretboard(self, num_strings=self.num_strings, max_fret=self.max_fret, tuning=self.tuning, enable_click_reporting=False)
+        self.fretboard = Fretboard(
+            self,
+            num_frets=self.max_fret,
+            tuning=self.tuning,
+            enable_click_reporting=False,
+        )
         self.fretboard.pack(fill="both", expand=True, padx=10, pady=10)
 
         entry_row = tk.Frame(self)
