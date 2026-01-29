@@ -27,15 +27,14 @@ class Fretboard(tk.Frame):
 
     TEXT = "#e7e9ee"
     MUTED = "#a9afbf"
-    MUTED_STRONG = "#d0d6e6"      # brighter for labels
-    PILL_BG = "#1c2333"           # label background
-    PILL_BORDER = "#2f3850"       # label border
+    MUTED_STRONG = "#d0d6e6"
+    PILL_BG = "#1c2333"
+    PILL_BORDER = "#2f3850"
 
     MARKER_RED = "#ff4d6d"
     MARKER_GREEN = "#2ecc71"
     MARKER_ORANGE = "#f39c12"
 
-    # Better heatmap palette (high contrast)
     HEAT_LOW = "#2563eb"   # blue
     HEAT_MID = "#f59e0b"   # amber
     HEAT_HIGH = "#ef4444"  # red
@@ -74,9 +73,10 @@ class Fretboard(tk.Frame):
         self._cell_markers: dict[Position, str] = {}
         self._heatmap_values: dict[Position, float] = {}
 
-        # Modes / UI
         self._heatmap_mode: bool = False
         self._string_labels_mode: str = "numbers"  # "numbers" | "notes"
+        self._show_fret_numbers: bool = True
+
         self._toggle_labels_btn = ttk.Button(
             self.canvas, text="NUM", command=self._toggle_string_labels, width=6
         )
@@ -86,7 +86,22 @@ class Fretboard(tk.Frame):
             self.canvas.bind("<Button-1>", self._on_click)
 
     # ---------------------------------------------------------------------
-    # Compatibility layer (used by quiz_tk / practice_tk)
+    # Public toggles
+    # ---------------------------------------------------------------------
+    def set_show_fret_numbers(self, show: bool) -> None:
+        self._show_fret_numbers = bool(show)
+        self.redraw()
+
+    def get_show_fret_numbers(self) -> bool:
+        return bool(self._show_fret_numbers)
+
+    def toggle_fret_numbers(self) -> bool:
+        self._show_fret_numbers = not self._show_fret_numbers
+        self.redraw()
+        return self._show_fret_numbers
+
+    # ---------------------------------------------------------------------
+    # Compatibility layer
     # ---------------------------------------------------------------------
     def highlight_position(self, position: Position | None) -> None:
         self._single_highlight = position
@@ -105,11 +120,6 @@ class Fretboard(tk.Frame):
         self.redraw()
 
     def set_cell_marker(self, position: Position, *args, **kwargs) -> None:
-        """
-        Backwards compatible:
-          - set_cell_marker(position, outline="red")
-          - set_cell_marker(position, "red")
-        """
         color = None
         if args:
             color = args[0]
@@ -153,7 +163,6 @@ class Fretboard(tk.Frame):
         band_bot = top_y + (self.num_strings - 1) * spacing + half_band if self.num_strings > 1 else top_y + half_band
         return layout, spacing, top_y, half_band, band_top, band_bot
 
-    # Precise click mapping (matches redraw geometry)
     def _on_click(self, event) -> None:
         if not self._click_cb:
             return
@@ -219,7 +228,6 @@ class Fretboard(tk.Frame):
             return "#4c8dff"
         return c
 
-    # Heatmap color interpolation (blue -> amber -> red)
     def _hex_to_rgb(self, hx: str) -> tuple[int, int, int]:
         hx = hx.lstrip("#")
         return int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
@@ -262,30 +270,25 @@ class Fretboard(tk.Frame):
         nut_x1 = layout.margin_x + layout.nut_width
         right_x = nut_x1 + layout.num_frets * layout.fret_width
 
-        # gutter:
         gutter_w = 14 if self._heatmap_mode else 60
         gutter_x0 = max(0, left_x - gutter_w - 12)
         gutter_x1 = left_x - 12
 
         self.canvas.create_rectangle(0, 0, w, h, outline="", fill=self.CANVAS_BG)
 
-        # gutter panel + separator
         self.canvas.create_rectangle(gutter_x0, band_top, gutter_x1, band_bot, outline="", fill=self.GUTTER_BG)
         self.canvas.create_line(gutter_x1, band_top, gutter_x1, band_bot, fill=self.BORDER, width=2)
 
-        # toggle (not in heatmap)
         if not self._heatmap_mode:
-            self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTE")
+            self._toggle_labels_btn.configure(text="NUM" if self._string_labels_mode == "numbers" else "NOTES")
             btn_cx = gutter_x0 + (gutter_w / 2)
             btn_y = max(12, band_top - 18)
             self.canvas.create_window(btn_cx, btn_y, window=self._toggle_labels_btn, anchor="center")
 
-        # open + board
         self.canvas.create_rectangle(left_x, band_top, nut_x1, band_bot, outline="", fill=self.OPEN_BG)
         self.canvas.create_rectangle(nut_x1, band_top, right_x, band_bot, outline="", fill=self.BOARD_BG)
         self.canvas.create_rectangle(left_x, band_top, right_x, band_bot, outline=self.BORDER, width=2)
 
-        # heatmap (better colors + outline)
         if self._heatmap_values:
             for (s, f), v in self._heatmap_values.items():
                 if not (0 <= s < self.num_strings and 0 <= f <= self.num_frets):
@@ -311,13 +314,11 @@ class Fretboard(tk.Frame):
                     fill=self._heat_color(v),
                 )
 
-        # nut + frets
         self.canvas.create_line(nut_x1, band_top, nut_x1, band_bot, fill=self.NUT_LINE, width=4)
         for i in range(1, layout.num_frets + 1):
             x = nut_x1 + i * layout.fret_width
             self.canvas.create_line(x, band_top, x, band_bot, fill=self.FRET_LINE, width=2)
 
-        # fret dots
         dot_frets = {3, 5, 7, 9, 12, 15, 17, 19, 21, 24}
         mid_y = (band_top + band_bot) / 2.0
         for f in dot_frets:
@@ -337,7 +338,6 @@ class Fretboard(tk.Frame):
             else:
                 dot(mid_y)
 
-        # strings + labels
         for gui_row in range(self.num_strings):
             y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
 
@@ -352,7 +352,6 @@ class Fretboard(tk.Frame):
             if self._heatmap_mode:
                 continue
 
-            # Label pill: NUM or open-string note name
             if self._string_labels_mode == "numbers":
                 label = str(gui_row + 1)
             else:
@@ -377,7 +376,6 @@ class Fretboard(tk.Frame):
                 font=("Segoe UI", 11, "bold"),
             )
 
-        # markers
         for (s, f), color in self._cell_markers.items():
             rect = position_to_rect(layout, s, f)
             if rect is None:
@@ -396,7 +394,6 @@ class Fretboard(tk.Frame):
             self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill="#000000", outline="")
             self.canvas.create_oval(cx - (r - 1), cy - (r - 1), cx + (r - 1), cy + (r - 1), fill=c, outline=c)
 
-        # highlight (question) – filled red
         if self._single_highlight is not None:
             s, f = self._single_highlight
             rect = position_to_rect(layout, s, f)
@@ -415,7 +412,8 @@ class Fretboard(tk.Frame):
                                         fill="#2a0b14", outline="")
                 self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=self.MARKER_RED, outline=self.MARKER_RED)
 
-        # fret numbers
-        for f in range(1, layout.num_frets + 1):
-            x = nut_x1 + (f - 0.5) * layout.fret_width
-            self.canvas.create_text(x, band_bot + 20, text=str(f), fill=self.MUTED, font=("Segoe UI", 10))
+        # Fret numbers (toggleable)
+        if self._show_fret_numbers:
+            for f in range(1, layout.num_frets + 1):
+                x = nut_x1 + (f - 0.5) * layout.fret_width
+                self.canvas.create_text(x, band_bot + 20, text=str(f), fill=self.MUTED, font=("Segoe UI", 10))

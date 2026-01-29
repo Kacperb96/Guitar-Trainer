@@ -1,29 +1,40 @@
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 from tkinter import ttk
 
 
-# Dark palette
-BG = "#0f1115"
-PANEL = "#141824"
-PANEL_2 = "#10131b"
-CARD = "#141a28"
+# Windows 11-ish clean dark palette
+BG = "#0b0f19"          # app background
+SURFACE = "#0f1629"     # panels / cards
+SURFACE_2 = "#0c1324"   # deeper surface
+BORDER = "#1f2a44"      # subtle border
+BORDER_HI = "#2a3a5f"   # hover border
+
 TEXT = "#e7e9ee"
 MUTED = "#a9afbf"
+MUTED_2 = "#8b93a6"
 
-BORDER = "#242a3a"
-ACCENT = "#4c8dff"
-ERR = "#e74c3c"
+ACCENT = "#4c8dff"      # fluent-ish blue
+ACCENT_HI = "#6aa4ff"
+ACCENT_DOWN = "#2e66d6"
 
-# Interactive states
-HOVER_BG = "#1b2131"
-SELECT_BG = "#203a66"
-SELECT_FG = "#ffffff"
+DANGER = "#ff4d6d"
+DANGER_HI = "#ff6b85"
+DANGER_DOWN = "#d93a55"
+
+OK = "#2ecc71"
+WARN = "#f59e0b"
+
+
+def _font_family() -> str:
+    if sys.platform == "win32":
+        return "Segoe UI"
+    return "TkDefaultFont"
 
 
 def apply_theme(root: tk.Tk) -> None:
-    """Applies a modern dark ttk theme."""
     root.configure(bg=BG)
 
     style = ttk.Style(root)
@@ -32,166 +43,142 @@ def apply_theme(root: tk.Tk) -> None:
     except tk.TclError:
         pass
 
-    font_base = ("Segoe UI", 11)
-    font_small = ("Segoe UI", 10)
-    font_h1 = ("Segoe UI", 18, "bold")
-    font_h2 = ("Segoe UI", 13, "bold")
-    font_h3 = ("Segoe UI", 11, "bold")
-    font_mono = ("Consolas", 10)
+    ff = _font_family()
+    font_base = (ff, 11)
+    font_small = (ff, 10)
+    font_h1 = (ff, 18, "bold")
+    font_h2 = (ff, 13, "bold")
+    font_mono = ("Cascadia Mono" if sys.platform == "win32" else "TkFixedFont", 10)
 
     style.configure(".", font=font_base)
 
-    # Frames
+    # -------------------------
+    # Base containers
+    # -------------------------
     style.configure("TFrame", background=BG)
-    style.configure("Panel.TFrame", background=PANEL)
-    style.configure("Card.TFrame", background=CARD, bordercolor=BORDER, relief="solid", borderwidth=1)
-    style.configure("CardInner.TFrame", background=CARD)
-    style.configure("Divider.TFrame", background=BORDER)
+    style.configure("Card.TFrame", background=SURFACE, borderwidth=1, relief="solid")
+    style.configure("CardInner.TFrame", background=SURFACE)
+    style.configure("Panel.TFrame", background=SURFACE)
+    style.configure("Panel2.TFrame", background=SURFACE_2)
 
+    # -------------------------
     # Labels
+    # -------------------------
     style.configure("TLabel", background=BG, foreground=TEXT)
     style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=font_small)
+
     style.configure("H1.TLabel", background=BG, foreground=TEXT, font=font_h1)
     style.configure("H2.TLabel", background=BG, foreground=TEXT, font=font_h2)
-    style.configure("H3.TLabel", background=BG, foreground=TEXT, font=font_h3)
     style.configure("Mono.TLabel", background=BG, foreground=MUTED, font=font_mono)
 
-    style.configure("Card.TLabel", background=CARD, foreground=TEXT)
-    style.configure("CardMuted.TLabel", background=CARD, foreground=MUTED, font=font_small)
-    style.configure("CardTitle.TLabel", background=CARD, foreground=TEXT, font=font_h2)
-    style.configure("CardSection.TLabel", background=CARD, foreground=TEXT, font=font_h3)
-    style.configure("CardMono.TLabel", background=CARD, foreground=MUTED, font=font_mono)
+    style.configure("Card.TLabel", background=SURFACE, foreground=TEXT)
+    style.configure("CardTitle.TLabel", background=SURFACE, foreground=TEXT, font=font_h2)
+    style.configure("CardMuted.TLabel", background=SURFACE, foreground=MUTED, font=font_small)
+    style.configure("CardMono.TLabel", background=SURFACE, foreground=MUTED, font=font_mono)
 
-    # Labelframe (kept for other screens)
-    style.configure(
-        "TLabelframe",
-        background=BG,
-        foreground=TEXT,
-        bordercolor=BORDER,
-        relief="flat",
-        borderwidth=1,
-    )
-    style.configure("TLabelframe.Label", background=BG, foreground=TEXT, font=font_h3)
+    # Feedback styles (used by quiz/practice)
+    style.configure("Success.TLabel", background=BG, foreground=OK)
+    style.configure("DangerText.TLabel", background=BG, foreground=DANGER)
+    style.configure("Warn.TLabel", background=BG, foreground=WARN)
+    style.configure("Hint.TLabel", background=BG, foreground=MUTED, font=font_small)
 
-    # Entry
+    # -------------------------
+    # Entry / Combobox
+    # -------------------------
     style.configure(
         "TEntry",
-        fieldbackground=PANEL,
+        fieldbackground=SURFACE,
         foreground=TEXT,
         insertcolor=TEXT,
         bordercolor=BORDER,
         lightcolor=BORDER,
         darkcolor=BORDER,
-        padding=6,
+        padding=8,
     )
 
-    # Combobox
     style.configure(
         "TCombobox",
-        fieldbackground=PANEL,
-        background=PANEL,
+        fieldbackground=SURFACE,
+        background=SURFACE,
         foreground=TEXT,
         arrowcolor=TEXT,
         bordercolor=BORDER,
-        padding=6,
+        padding=8,
     )
     style.map(
         "TCombobox",
-        fieldbackground=[("readonly", PANEL)],
-        foreground=[("readonly", TEXT)],
-        background=[("readonly", PANEL)],
+        fieldbackground=[("readonly", SURFACE), ("disabled", SURFACE_2)],
+        foreground=[("readonly", TEXT), ("disabled", MUTED_2)],
+        background=[("readonly", SURFACE), ("disabled", SURFACE_2)],
+        bordercolor=[("focus", ACCENT_HI), ("active", BORDER_HI)],
     )
 
+    # -------------------------
     # Buttons
+    # -------------------------
     style.configure(
         "TButton",
-        background=PANEL,
+        background=SURFACE,
         foreground=TEXT,
         bordercolor=BORDER,
-        padding=(12, 9),
+        padding=(14, 10),
         focusthickness=0,
-        focuscolor=BORDER,
+        focuscolor=ACCENT_HI,
     )
     style.map(
         "TButton",
-        background=[("active", HOVER_BG), ("pressed", "#0b0e14")],
-        foreground=[("disabled", MUTED)],
-        bordercolor=[("active", "#2d3550")],
+        background=[("active", "#13203a"), ("pressed", "#0a1222"), ("disabled", SURFACE_2)],
+        foreground=[("disabled", MUTED_2)],
+        bordercolor=[("active", BORDER_HI), ("focus", ACCENT_HI)],
     )
 
-    # Primary
     style.configure(
         "Primary.TButton",
         background=ACCENT,
         foreground="#ffffff",
         bordercolor=ACCENT,
-        padding=(14, 10),
+        padding=(16, 11),
     )
     style.map(
         "Primary.TButton",
-        background=[("active", "#3a7cff"), ("pressed", "#2e66d6"), ("disabled", "#2a3a5f")],
-        bordercolor=[("active", "#3a7cff")],
+        background=[("active", ACCENT_HI), ("pressed", ACCENT_DOWN), ("disabled", "#253a66")],
+        bordercolor=[("active", ACCENT_HI), ("focus", ACCENT_HI)],
         foreground=[("disabled", MUTED)],
     )
 
-    # Danger
     style.configure(
         "Danger.TButton",
-        background=ERR,
+        background=DANGER,
         foreground="#ffffff",
-        bordercolor=ERR,
-        padding=(14, 10),
+        bordercolor=DANGER,
+        padding=(16, 11),
     )
     style.map(
         "Danger.TButton",
-        background=[("active", "#ff5d54"), ("pressed", "#c93a33"), ("disabled", "#4b2422")],
+        background=[("active", DANGER_HI), ("pressed", DANGER_DOWN), ("disabled", "#4b2430")],
+        bordercolor=[("active", DANGER_HI)],
         foreground=[("disabled", MUTED)],
     )
 
-    # Radiobutton (high contrast selection)
-    style.configure(
-        "TRadiobutton",
-        background=BG,
-        foreground=TEXT,
-        padding=(10, 7),
-        indicatorcolor=ACCENT,
-        indicatormargin=(0, 0, 8, 0),
-        focuscolor=BORDER,
-        focusthickness=0,
-    )
-    style.map(
-        "TRadiobutton",
-        background=[("selected", SELECT_BG), ("active", HOVER_BG)],
-        foreground=[("selected", SELECT_FG), ("disabled", MUTED)],
-        indicatorcolor=[("selected", ACCENT), ("active", ACCENT)],
-    )
-
-    # Checkbutton (if used)
-    style.configure(
-        "TCheckbutton",
-        background=BG,
-        foreground=TEXT,
-        padding=(10, 7),
-        indicatorcolor=ACCENT,
-    )
-    style.map(
-        "TCheckbutton",
-        background=[("active", HOVER_BG)],
-        foreground=[("disabled", MUTED)],
-        indicatorcolor=[("selected", ACCENT)],
-    )
-
-    # Progressbar (for stats)
+    # -------------------------
+    # Progressbar
+    # -------------------------
     style.configure(
         "TProgressbar",
         background=ACCENT,
-        troughcolor=PANEL,
+        troughcolor="#0a1222",
         bordercolor=BORDER,
-        lightcolor=BORDER,
-        darkcolor=BORDER,
+        lightcolor=ACCENT,
+        darkcolor=ACCENT,
     )
 
-    # Tk option DB (helps non-ttk widgets)
+    # -------------------------
+    # Tk defaults (soften legacy tk widgets)
+    # -------------------------
     root.option_add("*Background", BG)
     root.option_add("*Foreground", TEXT)
     root.option_add("*insertBackground", TEXT)
+    root.option_add("*selectBackground", ACCENT)
+    root.option_add("*selectForeground", "#ffffff")
+    root.option_add("*activeBackground", "#13203a")
+    root.option_add("*activeForeground", TEXT)

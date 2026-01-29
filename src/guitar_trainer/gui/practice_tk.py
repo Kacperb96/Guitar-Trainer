@@ -4,13 +4,13 @@ import random
 import time
 import tkinter as tk
 from collections import deque
-from dataclasses import dataclass
+from tkinter import ttk
 from typing import Deque, List, Optional, Set, Tuple
 
 from guitar_trainer.core.adaptive import choose_adaptive_position
-from guitar_trainer.core.quiz import question_name_at_position, check_note_name_answer
-from guitar_trainer.core.stats import Stats, save_stats
 from guitar_trainer.core.position_key import pos_key
+from guitar_trainer.core.quiz import check_note_name_answer, question_name_at_position
+from guitar_trainer.core.stats import Stats, save_stats
 from guitar_trainer.core.training_plan import TrainingPlanConfig
 from guitar_trainer.gui.fretboard import Fretboard, Position
 from guitar_trainer.gui.practice_summary_tk import PracticeSummary
@@ -41,12 +41,14 @@ class TrainingPlanState:
         self.max_fret = max_fret
         self.num_strings = num_strings
 
-        # dynamic state
         self.current_end_fret = min(max_fret, max(cfg.end_fret, cfg.start_fret))
         self.current_strings_gui_from = max(1, min(cfg.strings_gui_from, num_strings))
         self.current_strings_gui_to = max(1, min(cfg.strings_gui_to, num_strings))
         if self.current_strings_gui_from > self.current_strings_gui_to:
-            self.current_strings_gui_from, self.current_strings_gui_to = self.current_strings_gui_to, self.current_strings_gui_from
+            self.current_strings_gui_from, self.current_strings_gui_to = (
+                self.current_strings_gui_to,
+                self.current_strings_gui_from,
+            )
 
         self.current_heat_threshold = float(cfg.heat_threshold)
         self.last_level_up_time = time.monotonic()
@@ -61,7 +63,6 @@ class TrainingPlanState:
         return "Plan: None"
 
     def constraints(self, stats: Stats) -> tuple[Optional[Set[int]], Optional[Set[int]], Optional[Set[Position]]]:
-        # returns (allowed_strings_core, allowed_frets, allowed_positions)
         if self.cfg.profile == "FRETS_1_5":
             start = max(0, int(self.cfg.start_fret))
             end = max(start, int(self.current_end_fret))
@@ -69,7 +70,6 @@ class TrainingPlanState:
             return None, frets, None
 
         if self.cfg.profile == "STRINGS_3_6":
-            # Convert GUI numbering (1=top) to core indices (0=bottom):
             gui_from = int(self.current_strings_gui_from)
             gui_to = int(self.current_strings_gui_to)
             core_set: Set[int] = set()
@@ -100,20 +100,32 @@ class TrainingPlanState:
         changed = False
         if self.cfg.profile == "FRETS_1_5":
             if self.current_end_fret < self.max_fret:
-                self.current_end_fret = min(self.max_fret, self.current_end_fret + max(1, int(self.cfg.ramp_step_frets)))
+                self.current_end_fret = min(
+                    self.max_fret,
+                    self.current_end_fret + max(1, int(self.cfg.ramp_step_frets)),
+                )
                 changed = True
 
         elif self.cfg.profile == "STRINGS_3_6":
             if self.current_strings_gui_from > 1:
-                self.current_strings_gui_from = max(1, self.current_strings_gui_from - max(1, int(self.cfg.ramp_step_strings)))
+                self.current_strings_gui_from = max(
+                    1,
+                    self.current_strings_gui_from - max(1, int(self.cfg.ramp_step_strings)),
+                )
                 changed = True
             elif self.current_strings_gui_to < self.num_strings:
-                self.current_strings_gui_to = min(self.num_strings, self.current_strings_gui_to + max(1, int(self.cfg.ramp_step_strings)))
+                self.current_strings_gui_to = min(
+                    self.num_strings,
+                    self.current_strings_gui_to + max(1, int(self.cfg.ramp_step_strings)),
+                )
                 changed = True
 
         elif self.cfg.profile == "WEAK_HEATMAP":
             if self.current_heat_threshold > 0.0:
-                self.current_heat_threshold = max(0.0, self.current_heat_threshold - max(0.01, float(self.cfg.ramp_step_threshold)))
+                self.current_heat_threshold = max(
+                    0.0,
+                    self.current_heat_threshold - max(0.01, float(self.cfg.ramp_step_threshold)),
+                )
                 changed = True
 
         if changed:
@@ -130,7 +142,7 @@ def _position_weight(stats: Stats, s: int, f: int) -> float:
     return 1.0 + bad * 4.0 + (1.0 / (attempts + 1)) * 2.0
 
 
-class PracticeSessionFrame(tk.Frame):
+class PracticeSessionFrame(ttk.Frame):
     def __init__(
         self,
         master: tk.Misc,
@@ -160,11 +172,11 @@ class PracticeSessionFrame(tk.Frame):
 
         self.stats = stats
         self.stats_path = stats_path
-        self.minutes = minutes
-        self.max_fret = max_fret
+        self.minutes = int(minutes)
+        self.max_fret = int(max_fret)
         self.tuning = list(tuning)
         self.tuning_name = tuning_name
-        self.prefer_flats = prefer_flats
+        self.prefer_flats = bool(prefer_flats)
         self.num_strings = len(self.tuning)
 
         self.on_back = on_back
@@ -178,7 +190,7 @@ class PracticeSessionFrame(tk.Frame):
             if not self.allowed_strings:
                 self.allowed_strings = None
         if self.allowed_frets is not None:
-            self.allowed_frets = {f for f in self.allowed_frets if 0 <= f <= max_fret}
+            self.allowed_frets = {f for f in self.allowed_frets if 0 <= f <= self.max_fret}
             if not self.allowed_frets:
                 self.allowed_frets = None
 
@@ -187,7 +199,6 @@ class PracticeSessionFrame(tk.Frame):
         if self.plan_cfg is not None:
             self.plan_state = TrainingPlanState(self.plan_cfg, max_fret=self.max_fret, num_strings=self.num_strings)
 
-        # Rolling window for goal checking
         self._recent: Deque[tuple[float, bool]] = deque()
         self._last_levelup_msg_until = 0.0
 
@@ -197,7 +208,7 @@ class PracticeSessionFrame(tk.Frame):
         self.correct = 0
         self.total_time_sec = 0.0
 
-        self.session_seconds = minutes * 60
+        self.session_seconds = self.minutes * 60
         self.end_time = time.monotonic() + self.session_seconds
         self._timer_job: str | None = None
 
@@ -205,62 +216,100 @@ class PracticeSessionFrame(tk.Frame):
         self.current_correct_name: str | None = None
         self.question_start_time = time.monotonic()
 
-        header = tk.Frame(self)
-        header.pack(fill="x", pady=(0, 8))
+        # -------------------------
+        # Header (ttk)
+        # -------------------------
+        header = ttk.Frame(self)
+        header.pack(fill="x", pady=(0, 10))
+        header.columnconfigure(0, weight=1)
 
         subtitle = "Adaptive Notes"
         if self.allowed_strings is not None:
-            gui_nums = sorted({(self.num_strings - s) for s in self.allowed_strings})  # 1..N
-            subtitle += f" | Strings {', '.join(map(str, gui_nums))}"
+            gui_nums = sorted({(self.num_strings - s) for s in self.allowed_strings})
+            subtitle += f" • Strings {', '.join(map(str, gui_nums))}"
         if self.allowed_frets is not None and self.allowed_frets:
-            subtitle += f" | Frets {min(self.allowed_frets)}–{max(self.allowed_frets)}"
+            subtitle += f" • Frets {min(self.allowed_frets)}–{max(self.allowed_frets)}"
 
         display = "Flats" if self.prefer_flats else "Sharps"
-        tk.Label(
+
+        ttk.Label(header, text="Practice Session", style="H2.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
             header,
-            text=f"Practice ({minutes} min) | {self.num_strings}-string | {subtitle} | {tuning_name} | {display}",
-            font=("Arial", 13),
-        ).pack(side="left")
+            text=f"{self.minutes} min • {self.num_strings}-string • {subtitle} • {tuning_name} • {display}",
+            style="Hint.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
 
-        btns = tk.Frame(header)
-        btns.pack(side="right")
+        btns = ttk.Frame(header)
+        btns.grid(row=0, column=1, rowspan=2, sticky="e")
+
         if self.on_back:
-            tk.Button(btns, text="Back to menu", command=self._back).pack(side="left", padx=(0, 6))
-        tk.Button(btns, text="End session", command=self._end_early).pack(side="left")
+            ttk.Button(btns, text="Back", command=self._back).pack(side="left", padx=(0, 10))
+        ttk.Button(btns, text="End session", style="Danger.TButton", command=self._end_early).pack(side="left")
 
-        self.time_left_label = tk.Label(self, text="", font=("Arial", 12))
-        self.time_left_label.pack()
+        # Info row
+        info = ttk.Frame(self)
+        info.pack(fill="x", pady=(0, 6))
+        info.columnconfigure(0, weight=1)
+        info.columnconfigure(1, weight=1)
+        info.columnconfigure(2, weight=2)
 
-        self.score_label = tk.Label(self, text="", font=("Arial", 12))
-        self.score_label.pack()
+        self.time_left_label = ttk.Label(info, text="", style="Muted.TLabel")
+        self.time_left_label.grid(row=0, column=0, sticky="w")
 
-        self.plan_label = tk.Label(self, text="", font=("Arial", 11))
-        self.plan_label.pack(pady=(2, 0))
+        self.score_label = ttk.Label(info, text="", style="Muted.TLabel")
+        self.score_label.grid(row=0, column=1, sticky="w")
 
+        self.plan_label = ttk.Label(info, text="", style="Hint.TLabel")
+        self.plan_label.grid(row=0, column=2, sticky="w", padx=(10, 0))
+
+        # Fretboard
         self.fretboard = Fretboard(
             self,
             num_frets=self.max_fret,
             tuning=self.tuning,
             enable_click_reporting=False,
         )
-        self.fretboard.pack(fill="both", expand=True, padx=10, pady=10)
+        self.fretboard.pack(fill="both", expand=True, padx=12, pady=12)
 
-        entry_row = tk.Frame(self)
-        entry_row.pack(pady=(6, 2))
-        tk.Label(entry_row, text="Your answer:").pack(side=tk.LEFT)
+        # NEW: toggle fret numbers under fretboard
+        fret_controls = ttk.Frame(self)
+        fret_controls.pack(fill="x", pady=(0, 6))
+        fret_controls.columnconfigure(0, weight=1)
+
+        self._fret_nums_btn = ttk.Button(
+            fret_controls,
+            text="Hide fret numbers",
+            command=self._toggle_fret_numbers,
+        )
+        self._fret_nums_btn.grid(row=0, column=0, sticky="w")
+
+        # Answer row
+        entry_row = ttk.Frame(self)
+        entry_row.pack(fill="x", pady=(6, 2))
+        ttk.Label(entry_row, text="Your answer:").pack(side="left")
+
         self.answer_var = tk.StringVar()
-        self.answer_entry = tk.Entry(entry_row, textvariable=self.answer_var, width=10)
-        self.answer_entry.pack(side=tk.LEFT, padx=(6, 0))
-        self.submit_btn = tk.Button(entry_row, text="Submit", command=self.submit_answer)
-        self.submit_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.answer_entry = ttk.Entry(entry_row, textvariable=self.answer_var, width=12)
+        self.answer_entry.pack(side="left", padx=(10, 0))
 
-        self.feedback = tk.Label(self, text="")
-        self.feedback.pack(pady=(6, 0))
+        self.submit_btn = ttk.Button(entry_row, text="Submit", style="Primary.TButton", command=self.submit_answer)
+        self.submit_btn.pack(side="left", padx=(10, 0))
+
+        self.feedback = ttk.Label(self, text="", style="Hint.TLabel")
+        self.feedback.pack(anchor="w", pady=(10, 0))
+
         self.answer_entry.bind("<Return>", lambda _e: self.submit_answer())
 
         self._update_ui_labels()
         self._tick_timer()
         self.next_question()
+
+    # -------------------------
+    # UI actions
+    # -------------------------
+    def _toggle_fret_numbers(self) -> None:
+        is_showing = self.fretboard.toggle_fret_numbers()
+        self._fret_nums_btn.configure(text="Hide fret numbers" if is_showing else "Show fret numbers")
 
     def _back(self) -> None:
         self._stop_timer()
@@ -279,6 +328,9 @@ class PracticeSessionFrame(tk.Frame):
         self._stop_timer()
         self.finish()
 
+    # -------------------------
+    # Timer / labels
+    # -------------------------
     def _tick_timer(self) -> None:
         remaining = int(self.end_time - time.monotonic())
         if remaining <= 0:
@@ -314,21 +366,24 @@ class PracticeSessionFrame(tk.Frame):
             if self.plan_state.maybe_level_up():
                 self._recent.clear()
                 self._last_levelup_msg_until = time.monotonic() + 2.5
-                self.feedback.config(text=f"⬆️ Level up! {self.plan_state.describe()}")
+                self.feedback.configure(text=f"⬆️ Level up! {self.plan_state.describe()}", style="Warn.TLabel")
 
     def _update_ui_labels(self) -> None:
         remaining = max(0, int(self.end_time - time.monotonic()))
-        self.time_left_label.config(text=f"Time left: {self._format_time(remaining)}")
-        self.score_label.config(text=f"Correct: {self.correct}/{self.total}")
+        self.time_left_label.configure(text=f"Time left: {self._format_time(remaining)}")
+        self.score_label.configure(text=f"Correct: {self.correct}/{self.total}")
 
         if self.plan_state and self.plan_cfg:
             acc, _c, n = self._window_stats()
             goal = int(float(self.plan_cfg.goal_accuracy) * 100)
             cur = int(acc * 100)
-            self.plan_label.config(text=f"{self.plan_state.describe()} | Goal: {cur}%/{goal}% ({n})")
+            self.plan_label.configure(text=f"{self.plan_state.describe()} • Goal: {cur}%/{goal}% ({n})")
         else:
-            self.plan_label.config(text="")
+            self.plan_label.configure(text="")
 
+    # -------------------------
+    # Position selection
+    # -------------------------
     def _merged_constraints(self) -> tuple[Optional[Set[int]], Optional[Set[int]], Optional[Set[Position]]]:
         plan_strings, plan_frets, plan_positions = (None, None, None)
         if self.plan_state:
@@ -384,6 +439,9 @@ class PracticeSessionFrame(tk.Frame):
         candidates = [(s, f) for s in strings2 for f in frets2]
         return self.rng.choice(candidates) if candidates else (0, 0)
 
+    # -------------------------
+    # Flow
+    # -------------------------
     def next_question(self) -> None:
         if time.monotonic() >= self.end_time:
             self.finish()
@@ -398,7 +456,7 @@ class PracticeSessionFrame(tk.Frame):
 
         self.fretboard.highlight_position(self.current_position)
         if time.monotonic() > self._last_levelup_msg_until:
-            self.feedback.config(text="")
+            self.feedback.configure(text="", style="Hint.TLabel")
         self.answer_var.set("")
         self.answer_entry.focus_set()
         self.question_start_time = time.monotonic()
@@ -427,10 +485,17 @@ class PracticeSessionFrame(tk.Frame):
             self._recent.append((time.monotonic(), bool(is_correct)))
             self._maybe_level_up()
 
-        self.feedback.config(text="✅ Correct" if is_correct else f"❌ Wrong. Correct: {self.current_correct_name}")
+        if is_correct:
+            self.feedback.configure(text="Correct ✓", style="Success.TLabel")
+        else:
+            self.feedback.configure(text=f"Wrong ✕  Correct: {self.current_correct_name}", style="DangerText.TLabel")
+
         self._update_ui_labels()
         self.after(450, self.next_question)
 
+    # -------------------------
+    # Summary computations
+    # -------------------------
     def _compute_weak_strings(self) -> List[Tuple[str, int, float | None]]:
         items: List[Tuple[str, int, float | None]] = []
         for s in range(self.num_strings):
@@ -441,7 +506,7 @@ class PracticeSessionFrame(tk.Frame):
                 attempts_sum += a
                 correct_sum += c
 
-            label = f"String {self.num_strings - s}"  # GUI numbering
+            label = f"String {self.num_strings - s}"
             if attempts_sum == 0:
                 items.append((label, 0, None))
             else:
@@ -467,13 +532,16 @@ class PracticeSessionFrame(tk.Frame):
                 items.append((label, attempts_sum, acc))
         return _rank_weak_items(items, top_n=3)
 
+    # -------------------------
+    # Finish
+    # -------------------------
     def finish(self) -> None:
         self._stop_timer()
         self.fretboard.clear_highlight()
         save_stats(self.stats_path, self.stats)
 
-        self.submit_btn.config(state=tk.DISABLED)
-        self.answer_entry.config(state=tk.DISABLED)
+        self.submit_btn.configure(state="disabled")
+        self.answer_entry.configure(state="disabled")
 
         answered = self.total
         correct = self.correct
@@ -496,4 +564,7 @@ class PracticeSessionFrame(tk.Frame):
         if self.on_finish is not None:
             self.on_finish(summary)
         else:
-            self.feedback.config(text=f"Finished: {correct}/{answered} ({acc:.1f}%), avg {avg_time:.2f}s")
+            self.feedback.configure(
+                text=f"Finished: {correct}/{answered} ({acc:.1f}%), avg {avg_time:.2f}s",
+                style="Hint.TLabel",
+            )

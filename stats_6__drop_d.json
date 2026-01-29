@@ -1,0 +1,28 @@
+{
+  "total_attempts": 0,
+  "total_correct": 0,
+  "by_mode": {
+    "A": {
+      "attempts": 0,
+      "correct": 0
+    },
+    "B": {
+      "attempts": 0,
+      "correct": 0
+    }
+  },
+  "by_note": {},
+  "by_position": {},
+  "meta": {
+    "num_strings": 6,
+    "tuning_name": "Drop D",
+    "tuning": [
+      2,
+      9,
+      2,
+      7,
+      11,
+      4
+    ]
+  }
+}
