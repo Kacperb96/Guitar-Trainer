@@ -88,8 +88,8 @@ def build_settings_from_menu(
     plan_heat_thr_raw: str,
 ) -> AppSettings:
     mode = str(mode_raw or "").strip().upper() or "A"
-    if mode not in ("A", "B", "ADAPT", "PRACTICE"):
-        raise ValueError("Mode must be one of: A, B, ADAPT, PRACTICE.")
+    if mode not in ("A", "B", "C", "ADAPT", "PRACTICE"):
+        raise ValueError("Mode must be one of: A, B, C, ADAPT, PRACTICE.")
 
     num_questions = parse_int_field(
         questions_raw, min_value=QUESTIONS_MIN, max_value=QUESTIONS_MAX, field_name="Questions"

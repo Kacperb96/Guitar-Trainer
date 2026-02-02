@@ -25,7 +25,7 @@ class MenuFrame(ttk.Frame):
         master: tk.Misc,
         *,
         stats_path_resolver: Callable[[int, str, list[int] | None], str],
-        on_start: callable,     # callback(..., custom_tuning, plan_config)
+        on_start: callable,     # callback(mode, num_questions, max_fret, tuning_name, practice_minutes, prefer_flats, num_strings, custom_tuning, plan_config)
         on_heatmap: callable,   # callback(max_fret)
     ) -> None:
         super().__init__(master)
@@ -143,6 +143,7 @@ class MenuFrame(ttk.Frame):
 
         self._radio(mode_inner, "Mode A — Guess the note", "A").pack(anchor="w", pady=3)
         self._radio(mode_inner, "Mode B — Find all positions", "B").pack(anchor="w", pady=3)
+        self._radio(mode_inner, "Mode C — Note on highlighted string", "C").pack(anchor="w", pady=3)
         self._radio(mode_inner, "Adaptive (Mode A)", "ADAPT").pack(anchor="w", pady=3)
         self._radio(mode_inner, "Practice Session (timed)", "PRACTICE").pack(anchor="w", pady=3)
 
@@ -188,21 +189,18 @@ class MenuFrame(ttk.Frame):
     # Scroll helpers (LEFT column)
     # -----------------------
     def _on_left_inner_configure(self, _event=None) -> None:
-        # Update the scrollregion to encompass the inner frame
         try:
             self._left_canvas.configure(scrollregion=self._left_canvas.bbox("all"))
         except Exception:
             return
 
     def _on_left_canvas_configure(self, event) -> None:
-        # Make the inner window match the canvas width (so cards fill the column)
         try:
             self._left_canvas.itemconfigure(self._left_window_id, width=event.width)
         except Exception:
             return
 
     def _bind_mousewheel(self, widget: tk.Widget) -> None:
-        # Windows / macOS use <MouseWheel>, Linux typically uses Button-4/5
         widget.bind("<Enter>", lambda e: self._set_mousewheel_target(True), add="+")
         widget.bind("<Leave>", lambda e: self._set_mousewheel_target(False), add="+")
 
@@ -220,7 +218,6 @@ class MenuFrame(ttk.Frame):
                 pass
 
     def _on_mousewheel(self, event) -> None:
-        # Windows: event.delta is typically multiples of 120
         try:
             delta = int(-1 * (event.delta / 120))
             self._left_canvas.yview_scroll(delta, "units")
@@ -258,125 +255,97 @@ class MenuFrame(ttk.Frame):
     def _form_row(self, parent: ttk.Frame, label: str) -> ttk.Frame:
         row = ttk.Frame(parent, style="CardInner.TFrame")
         row.pack(fill="x", pady=5)
-        row.columnconfigure(0, weight=1)
-        row.columnconfigure(1, weight=0)
-
-        ttk.Label(row, text=label, style="Card.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(row, text=label, style="CardLabel.TLabel").pack(side="left")
         return row
 
-    def _get_num_strings(self) -> int:
-        try:
-            n = int(self.num_strings_var.get().strip())
-        except Exception:
-            return DEFAULT_NUM_STRINGS
-        return n if 4 <= n <= 12 else DEFAULT_NUM_STRINGS
-
-    # -----------------------
-    # Forms
-    # -----------------------
     def _build_settings_form(self, parent: ttk.Frame) -> None:
-        r0 = self._form_row(parent, "Instrument (strings)")
+        # Number of strings
+        row = self._form_row(parent, "Number of strings")
         self.num_strings_combo = ttk.Combobox(
-            r0, textvariable=self.num_strings_var, values=["6", "7"], width=6, state="readonly"
-        )
-        self.num_strings_combo.grid(row=0, column=1, sticky="e")
-
-        r1 = self._form_row(parent, "Tuning")
-        self.tuning_combo = ttk.Combobox(r1, textvariable=self.tuning_var, values=[], width=22, state="readonly")
-        self.tuning_combo.grid(row=0, column=1, sticky="e")
-
-        r2 = self._form_row(parent, "Display")
-        self.display_combo = ttk.Combobox(
-            r2, textvariable=self.display_var, values=["Sharps", "Flats"], width=10, state="readonly"
-        )
-        self.display_combo.grid(row=0, column=1, sticky="e")
-
-        r3 = self._form_row(parent, "Questions")
-        self.questions_entry = ttk.Entry(r3, textvariable=self.questions_var, width=8)
-        self.questions_entry.grid(row=0, column=1, sticky="e")
-
-        r4 = self._form_row(parent, "Practice (min)")
-        self.practice_entry = ttk.Entry(r4, textvariable=self.practice_minutes_var, width=8)
-        self.practice_entry.grid(row=0, column=1, sticky="e")
-
-        r5 = self._form_row(parent, "Max fret")
-        self.max_fret_entry = ttk.Entry(r5, textvariable=self.max_fret_var, width=8)
-        self.max_fret_entry.grid(row=0, column=1, sticky="e")
-
-    def _build_plan_form(self, parent: ttk.Frame) -> None:
-        r0 = self._form_row(parent, "Profile")
-        self.plan_combo = ttk.Combobox(
-            r0,
-            textvariable=self.plan_var,
-            values=[
-                "None",
-                "Frets 1–5",
-                "Weak spots (heatmap > 0.6)",
-                "Strings 3–6",
-            ],
-            width=22,
+            row,
+            textvariable=self.num_strings_var,
+            values=[str(i) for i in range(4, 13)],
+            width=6,
             state="readonly",
         )
-        self.plan_combo.grid(row=0, column=1, sticky="e")
+        self.num_strings_combo.pack(side="right")
 
-        r1 = self._form_row(parent, "Goal accuracy")
-        self.plan_goal_acc_entry = ttk.Entry(r1, textvariable=self.plan_goal_acc_var, width=8)
-        self.plan_goal_acc_entry.grid(row=0, column=1, sticky="e")
+        # Tuning presets
+        row = self._form_row(parent, "Tuning")
+        self.tuning_combo = ttk.Combobox(row, textvariable=self.tuning_var, width=22, state="readonly")
+        self.tuning_combo.pack(side="right")
 
-        r2 = self._form_row(parent, "Goal window (sec)")
-        self.plan_goal_window_entry = ttk.Entry(r2, textvariable=self.plan_goal_window_var, width=8)
-        self.plan_goal_window_entry.grid(row=0, column=1, sticky="e")
+        # Display flats / sharps
+        row = self._form_row(parent, "Display")
+        self.display_combo = ttk.Combobox(
+            row,
+            textvariable=self.display_var,
+            values=["Sharps", "Flats"],
+            width=10,
+            state="readonly",
+        )
+        self.display_combo.pack(side="right")
 
-        r3 = self._form_row(parent, "Heatmap threshold")
-        self.plan_heat_thr_entry = ttk.Entry(r3, textvariable=self.plan_heat_thr_var, width=8)
-        self.plan_heat_thr_entry.grid(row=0, column=1, sticky="e")
+        # Questions
+        row = self._form_row(parent, "Questions")
+        ttk.Entry(row, textvariable=self.questions_var, width=8).pack(side="right")
 
-        ttk.Label(
-            parent,
-            text="Tip: 1.0 means unseen/worst (heatmap uses 1 - accuracy).",
-            style="CardMuted.TLabel",
-        ).pack(anchor="w", pady=(8, 0))
+        # Max fret
+        row = self._form_row(parent, "Max fret")
+        ttk.Entry(row, textvariable=self.max_fret_var, width=8).pack(side="right")
+
+        # Practice minutes
+        row = self._form_row(parent, "Practice minutes")
+        ttk.Entry(row, textvariable=self.practice_minutes_var, width=8).pack(side="right")
+
+    def _build_plan_form(self, parent: ttk.Frame) -> None:
+        row = self._form_row(parent, "Plan")
+        self.plan_combo = ttk.Combobox(
+            row,
+            textvariable=self.plan_var,
+            values=["None", "Accuracy", "Heatmap"],
+            width=12,
+            state="readonly",
+        )
+        self.plan_combo.pack(side="right")
+
+        row = self._form_row(parent, "Goal accuracy (0..1)")
+        self.plan_goal_acc_entry = ttk.Entry(row, textvariable=self.plan_goal_acc_var, width=10)
+        self.plan_goal_acc_entry.pack(side="right")
+
+        row = self._form_row(parent, "Window seconds")
+        self.plan_goal_window_entry = ttk.Entry(row, textvariable=self.plan_goal_window_var, width=10)
+        self.plan_goal_window_entry.pack(side="right")
+
+        row = self._form_row(parent, "Heat threshold (0..1)")
+        self.plan_heat_thr_entry = ttk.Entry(row, textvariable=self.plan_heat_thr_var, width=10)
+        self.plan_heat_thr_entry.pack(side="right")
 
     def _build_custom_tuning(self, parent: ttk.Frame) -> None:
-        self.custom_entry = ttk.Entry(parent, textvariable=self.custom_tuning_var)
-        self.custom_entry.pack(fill="x")
+        row = ttk.Frame(parent, style="CardInner.TFrame")
+        row.pack(fill="x", pady=5)
+        ttk.Label(row, text="Custom tuning", style="CardLabel.TLabel").pack(side="left")
+        ttk.Entry(row, textvariable=self.custom_tuning_var, width=22).pack(side="right")
 
-        ttk.Label(
-            parent,
-            text="Accepted: sharps/flats (Eb, D#, Ab) • Space or comma separated.",
-            style="CardMuted.TLabel",
-        ).pack(anchor="w", pady=(8, 0))
-
-    # -----------------------
-    # Right side
-    # -----------------------
     def _build_profile_summary(self, parent: ttk.Frame) -> None:
-        self.active_file_label = ttk.Label(parent, text="", style="CardMono.TLabel")
+        self.active_file_label = ttk.Label(parent, text="", style="CardMuted.TLabel")
         self.active_file_label.pack(anchor="w")
 
-        row = ttk.Frame(parent, style="CardInner.TFrame")
-        row.pack(fill="x", pady=(10, 2))
-        row.columnconfigure(0, weight=1)
-        row.columnconfigure(1, weight=1)
-        row.columnconfigure(2, weight=1)
+        self.attempts_label = ttk.Label(parent, text="", style="CardLabel.TLabel")
+        self.attempts_label.pack(anchor="w", pady=(10, 0))
 
-        self.attempts_label = ttk.Label(row, text="Attempts: 0", style="Card.TLabel")
-        self.attempts_label.grid(row=0, column=0, sticky="w")
+        self.correct_label = ttk.Label(parent, text="", style="CardLabel.TLabel")
+        self.correct_label.pack(anchor="w", pady=(2, 0))
 
-        self.correct_label = ttk.Label(row, text="Correct: 0", style="Card.TLabel")
-        self.correct_label.grid(row=0, column=1, sticky="w")
+        self.acc_label = ttk.Label(parent, text="", style="CardLabel.TLabel")
+        self.acc_label.pack(anchor="w", pady=(2, 0))
 
-        self.acc_label = ttk.Label(row, text="Accuracy: 0.0%", style="Card.TLabel")
-        self.acc_label.grid(row=0, column=2, sticky="w")
-
-        self.acc_bar = ttk.Progressbar(parent, orient="horizontal", mode="determinate", maximum=100)
-        self.acc_bar.pack(fill="x", pady=(8, 0))
+        self.acc_bar = ttk.Progressbar(parent, orient="horizontal", length=260, mode="determinate")
+        self.acc_bar.pack(anchor="w", pady=(10, 0), fill="x")
 
     def _build_actions(self, parent: ttk.Frame) -> None:
         grid = ttk.Frame(parent, style="CardInner.TFrame")
         grid.pack(fill="x")
-        grid.columnconfigure(0, weight=1)
-        grid.columnconfigure(1, weight=1)
 
         ttk.Button(grid, text="Show stats", command=self._show_stats_clicked).grid(
             row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 10)
@@ -396,6 +365,15 @@ class MenuFrame(ttk.Frame):
     # -----------------------
     # Data / refresh
     # -----------------------
+    def _get_num_strings(self) -> int:
+        try:
+            n = int(str(self.num_strings_var.get()).strip())
+        except Exception:
+            n = DEFAULT_NUM_STRINGS
+        if n < 4 or n > 12:
+            n = DEFAULT_NUM_STRINGS
+        return n
+
     def _refresh_tuning_options(self) -> None:
         n = self._get_num_strings()
         presets = get_tuning_presets(num_strings=n)

@@ -6,7 +6,7 @@ from guitar_trainer.gui.theme import apply_theme
 from guitar_trainer.core.stats import load_stats
 from guitar_trainer.core.tuning import get_tuning_by_name
 from guitar_trainer.gui.menu_tk import MenuFrame
-from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame, AdaptiveNoteQuizFrame
+from guitar_trainer.gui.quiz_tk import NoteQuizFrame, PositionsQuizFrame, AdaptiveNoteQuizFrame, StringOnStringQuizFrame
 from guitar_trainer.gui.practice_tk import PracticeSessionFrame
 from guitar_trainer.gui.practice_summary_tk import PracticeSummaryFrame, PracticeSummary
 from guitar_trainer.gui.stats_view_tk import StatsHeatmapFrame
@@ -215,6 +215,19 @@ def run_gui() -> None:
 
         elif mode == "ADAPT":
             frame = AdaptiveNoteQuizFrame(
+                root,
+                stats=stats,
+                stats_path=stats_path,
+                num_questions=num_questions,
+                max_fret=max_fret,
+                tuning=tuning,
+                tuning_name=shown_name,
+                prefer_flats=prefer_flats,
+                on_back=show_menu,
+            )
+
+        elif mode == "C":
+            frame = StringOnStringQuizFrame(
                 root,
                 stats=stats,
                 stats_path=stats_path,

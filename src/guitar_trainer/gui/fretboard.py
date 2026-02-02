@@ -22,6 +22,8 @@ class Fretboard(tk.Frame):
     STRING = "#d7dbe6"
     STRING_SHADOW = "#8a93aa"
 
+    HIGHLIGHT_BAND = "#0b5d6b"  # teal band for selected string
+
     DOT = "#7b8398"
     DOT_SHADOW = "#2b3142"
 
@@ -70,6 +72,7 @@ class Fretboard(tk.Frame):
         self.canvas.pack(fill="both", expand=True)
 
         self._single_highlight: Position | None = None
+        self._highlighted_string: int | None = None
         self._cell_markers: dict[Position, str] = {}
         self._heatmap_values: dict[Position, float] = {}
 
@@ -78,7 +81,8 @@ class Fretboard(tk.Frame):
         self._show_fret_numbers: bool = True
 
         self._toggle_labels_btn = ttk.Button(
-            self.canvas, text="NUM", command=self._toggle_string_labels, width=6
+            self.canvas, text="NUM",
+            command=self._toggle_string_labels, width=6
         )
 
         self.canvas.bind("<Configure>", lambda _e: self.redraw())
@@ -117,6 +121,19 @@ class Fretboard(tk.Frame):
 
     def set_single_highlight(self, position: Position | None) -> None:
         self._single_highlight = position
+        self.redraw()
+
+    def set_highlighted_string(self, string_index: int | None) -> None:
+        """Highlight a whole string (0 = lowest pitch string)."""
+        if string_index is None:
+            self._highlighted_string = None
+        else:
+            i = int(string_index)
+            self._highlighted_string = i if 0 <= i < self.num_strings else None
+        self.redraw()
+
+    def clear_highlighted_string(self) -> None:
+        self._highlighted_string = None
         self.redraw()
 
     def set_cell_marker(self, position: Position, *args, **kwargs) -> None:
@@ -199,7 +216,7 @@ class Fretboard(tk.Frame):
 
     # Heatmap API
     def set_heatmap(self, values: dict[Position, float]) -> None:
-        self._heatmap_values = dict(values)
+        self._heatmap_values = dict(values or {})
         self._heatmap_mode = True
         self.redraw()
 
@@ -208,56 +225,33 @@ class Fretboard(tk.Frame):
         self._heatmap_mode = False
         self.redraw()
 
+    def _heat_color(self, value: float) -> str:
+        if value <= 0.33:
+            return self.HEAT_LOW
+        if value <= 0.66:
+            return self.HEAT_MID
+        return self.HEAT_HIGH
+
+    def _heat_outline(self, value: float) -> str:
+        return self._heat_color(value)
+
     # Drawing helpers
     def _cell_center(self, x0: float, y0: float, x1: float, y1: float) -> tuple[float, float]:
-        return (0.5 * (x0 + x1), 0.5 * (y0 + y1))
+        return (x0 + x1) / 2.0, (y0 + y1) / 2.0
 
     def _dot_radius(self, x0: float, y0: float, x1: float, y1: float, *, scale: float) -> float:
-        r = min((x1 - x0), (y1 - y0)) * scale
-        return max(6.0, min(18.0, r))
+        w = abs(x1 - x0)
+        h = abs(y1 - y0)
+        base = min(w, h)
+        return max(4.0, base * float(scale))
 
-    def _map_marker_color(self, c: str) -> str:
-        name = c.lower().strip()
-        if name in {"red", "#ff0000"}:
-            return self.MARKER_RED
-        if name in {"green"}:
+    def _map_marker_color(self, color: str) -> str:
+        c = str(color or "").strip().lower()
+        if c in {"green", "#2ecc71"}:
             return self.MARKER_GREEN
-        if name in {"orange"}:
+        if c in {"orange", "#f39c12"}:
             return self.MARKER_ORANGE
-        if name in {"blue"}:
-            return "#4c8dff"
-        return c
-
-    def _hex_to_rgb(self, hx: str) -> tuple[int, int, int]:
-        hx = hx.lstrip("#")
-        return int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
-
-    def _rgb_to_hex(self, r: int, g: int, b: int) -> str:
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    def _lerp(self, a: float, b: float, t: float) -> float:
-        return a + (b - a) * t
-
-    def _lerp_color(self, c1: str, c2: str, t: float) -> str:
-        t = max(0.0, min(1.0, float(t)))
-        r1, g1, b1 = self._hex_to_rgb(c1)
-        r2, g2, b2 = self._hex_to_rgb(c2)
-        return self._rgb_to_hex(
-            int(self._lerp(r1, r2, t)),
-            int(self._lerp(g1, g2, t)),
-            int(self._lerp(b1, b2, t)),
-        )
-
-    def _heat_color(self, v: float) -> str:
-        v = max(0.0, min(1.0, float(v)))
-        if v <= 0.5:
-            return self._lerp_color(self.HEAT_LOW, self.HEAT_MID, v / 0.5)
-        return self._lerp_color(self.HEAT_MID, self.HEAT_HIGH, (v - 0.5) / 0.5)
-
-    def _heat_outline(self, v: float) -> str:
-        v = max(0.0, min(1.0, float(v)))
-        bright = "#94a3b8"
-        return self._lerp_color(self.BORDER, bright, v)
+        return self.MARKER_RED
 
     def redraw(self) -> None:
         self.canvas.delete("all")
@@ -288,6 +282,22 @@ class Fretboard(tk.Frame):
         self.canvas.create_rectangle(left_x, band_top, nut_x1, band_bot, outline="", fill=self.OPEN_BG)
         self.canvas.create_rectangle(nut_x1, band_top, right_x, band_bot, outline="", fill=self.BOARD_BG)
         self.canvas.create_rectangle(left_x, band_top, right_x, band_bot, outline=self.BORDER, width=2)
+
+        # Highlight an entire string (if requested)
+        if self._highlighted_string is not None and not self._heatmap_mode:
+            s = self._highlighted_string
+            gui_row = (self.num_strings - 1) - s
+            y = top_y + gui_row * spacing if self.num_strings > 1 else top_y
+            y0 = y - half_band
+            y1 = y + half_band
+            self.canvas.create_rectangle(
+                left_x,
+                y0,
+                right_x,
+                y1,
+                outline="",
+                fill=self.HIGHLIGHT_BAND,
+            )
 
         if self._heatmap_values:
             for (s, f), v in self._heatmap_values.items():
@@ -410,7 +420,8 @@ class Fretboard(tk.Frame):
 
                 self.canvas.create_oval(cx - (r + 5), cy - (r + 5), cx + (r + 5), cy + (r + 5),
                                         fill="#2a0b14", outline="")
-                self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=self.MARKER_RED, outline=self.MARKER_RED)
+                self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=self.MARKER_RED,
+                                        outline=self.MARKER_RED)
 
         # Fret numbers (toggleable)
         if self._show_fret_numbers:
