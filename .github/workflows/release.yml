@@ -3,12 +3,31 @@ name: Build and Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*"
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # 1) Create the GitHub Release immediately (does NOT wait for runners / builds)
+  create_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release (generate notes)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  # 2) Build artifacts (optional; if GitHub has no runners, this may fail)
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -21,69 +40,42 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
-      - name: Install package + PyInstaller (Linux)
-        if: runner.os == 'Linux'
+      - name: Install build tooling
         run: |
-          python -m pip install -U pip
-          pip install -e .
-          pip install pyinstaller
+          python -m pip install --upgrade pip
+          python -m pip install build
 
-      - name: Install package + PyInstaller (Windows)
-        if: runner.os == 'Windows'
+      - name: Build package
         run: |
-          python -m pip install -U pip
-          pip install -e .
-          pip install pyinstaller
+          python -m build
 
-      # Build app (adjust this command if your entrypoint differs)
-      - name: Build with PyInstaller (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed scripts/run_gui.py
-          cd dist
-          zip -r GuitarTrainer-linux-x64.zip GuitarTrainer
-
-      - name: Build with PyInstaller (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          pyinstaller --noconfirm --clean --name "GuitarTrainer" --windowed scripts\run_gui.py
-          Compress-Archive -Path "dist\GuitarTrainer\*" -DestinationPath "dist\GuitarTrainer-windows-x64.zip" -Force
-
-      - name: Upload artifact (Linux)
-        if: runner.os == 'Linux'
+      - name: Upload build artifacts to workflow run
         uses: actions/upload-artifact@v4
         with:
-          name: GuitarTrainer-linux-x64
-          path: dist/GuitarTrainer-linux-x64.zip
+          name: dist-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
 
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: GuitarTrainer-windows-x64
-          path: dist/GuitarTrainer-windows-x64.zip
-
-  release:
-    name: Create GitHub Release
+  # 3) Attach artifacts to the GitHub Release (runs ONLY if build succeeded)
+  upload_assets:
+    name: Upload release assets
     runs-on: ubuntu-latest
-    needs: build
-
+    needs: [create_release, build]
+    if: ${{ needs.create_release.result == 'success' && needs.build.result == 'success' }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create Release and Upload Assets
+      - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
-            artifacts/**/GuitarTrainer-*.zip
-          generate_release_notes: true
+            artifacts/**/*
